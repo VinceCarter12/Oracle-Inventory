@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -37,19 +46,36 @@ interface Employee {
   assignments: { id: string }[];
 }
 
+interface LookupData {
+  sites: { id: string; name: string }[];
+  departments?: { id: string; name: string }[];
+}
+
+const EMPTY_FORM = { name: "", employeeId: "", email: "", phone: "", siteId: "", departmentId: "" };
+
 export default function EmployeesPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [lookup, setLookup] = useState<LookupData>({ sites: [] });
+
+  function loadEmployees() {
+    return apiFetch("/api/employees")
+      .then((r) => r.json())
+      .then((data) => { setEmployees(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
 
   useEffect(() => {
-    apiFetch("/api/employees")
+    loadEmployees();
+    apiFetch("/api/lookup")
       .then((r) => r.json())
-      .then((data) => {
-        setEmployees(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      .then((data) => setLookup(data))
+      .catch(() => {});
   }, []);
 
   const filtered = employees.filter((emp) => {
@@ -66,12 +92,55 @@ export default function EmployeesPage() {
   const withAssets = employees.filter((e) => e.assignments.length > 0).length;
   const unassigned = total - withAssets;
 
+  async function handleSave() {
+    if (!form.name.trim() || !form.employeeId.trim()) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch("/api/employees", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          employeeId: form.employeeId.trim(),
+          email: form.email.trim() || null,
+          phone: form.phone.trim() || null,
+          siteId: form.siteId || null,
+          departmentId: form.departmentId || null,
+        }),
+      });
+      if (res.ok) {
+        setShowModal(false);
+        setForm(EMPTY_FORM);
+        setLoading(true);
+        loadEmployees();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    background: "rgba(255,255,255,.05)",
+    border: "1px solid rgba(255,255,255,.1)",
+    color: "#fff",
+    borderRadius: 8,
+    fontSize: 13,
+  };
+
+  const selectStyle = {
+    ...inputStyle,
+    height: 36,
+    padding: "0 10px",
+    width: "100%",
+    appearance: "none" as const,
+  };
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)", borderRadius: 16 }}>
       <TopBar
         placeholder="Search employees…"
         title="Employees"
         actionLabel="Add Employee"
+        onAction={() => setShowModal(true)}
         searchValue={search}
         onSearch={setSearch}
       >
@@ -79,8 +148,8 @@ export default function EmployeesPage() {
           All Depts ▾
         </Button>
       </TopBar>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
 
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
         {/* KPI strip */}
         <div className="grid-kpi-3">
           {loading ? (
@@ -146,8 +215,6 @@ export default function EmployeesPage() {
                   const [bg, fg] = AVATAR_COLORS[idx % AVATAR_COLORS.length];
                   const initials = emp.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
                   const assigned = emp.assignments.length;
-                  const maxSlots = Math.max(assigned, 1);
-                  const pct = Math.round((assigned / maxSlots) * 100);
                   return (
                     <TableRow key={emp.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                       <TableCell>
@@ -171,11 +238,18 @@ export default function EmployeesPage() {
                           <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,.06)", borderRadius: "9999px", overflow: "hidden", minWidth: 60 }}>
                             <div style={{ height: "100%", width: assigned > 0 ? "100%" : "0%", background: bg, borderRadius: "9999px" }} />
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", minWidth: 32, textAlign: "right" }}>{pct}%</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", minWidth: 32, textAlign: "right" }}>
+                            {assigned > 0 ? "100%" : "0%"}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground hover:text-white border border-white/7">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground hover:text-white border border-white/7"
+                          onClick={() => router.push(`/employees/${emp.id}`)}
+                        >
                           View
                         </Button>
                       </TableCell>
@@ -187,6 +261,95 @@ export default function EmployeesPage() {
           </Table>
         </div>
       </div>
+
+      {/* Add Employee Modal */}
+      <Dialog open={showModal} onOpenChange={(o) => { setShowModal(o); if (!o) setForm(EMPTY_FORM); }}>
+        <DialogContent style={{ background: "#1A1D1F", border: "1px solid rgba(255,255,255,.1)", borderRadius: 16, maxWidth: 480 }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "#fff", fontSize: 16, fontWeight: 800 }}>Add Employee</DialogTitle>
+          </DialogHeader>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 4 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <Label style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Full Name *</Label>
+                <Input
+                  style={inputStyle}
+                  className="mt-1"
+                  placeholder="Maria Santos"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Employee ID *</Label>
+                <Input
+                  style={inputStyle}
+                  className="mt-1"
+                  placeholder="EMP-006"
+                  value={form.employeeId}
+                  onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Email</Label>
+              <Input
+                style={inputStyle}
+                className="mt-1"
+                placeholder="m.santos@company.com"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Phone</Label>
+              <Input
+                style={inputStyle}
+                className="mt-1"
+                placeholder="+63 9xx xxx xxxx"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Site</Label>
+              <select
+                style={selectStyle}
+                className="mt-1"
+                value={form.siteId}
+                onChange={(e) => setForm({ ...form, siteId: e.target.value })}
+              >
+                <option value="">— Select site —</option>
+                {lookup.sites.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+              <Button
+                variant="ghost"
+                className="rounded-full px-5 text-sm text-muted-foreground hover:text-white"
+                onClick={() => { setShowModal(false); setForm(EMPTY_FORM); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={saving || !form.name.trim() || !form.employeeId.trim()}
+                onClick={handleSave}
+                style={{ background: "var(--lime)", color: "#0F1112", borderRadius: "9999px", fontWeight: 700, fontSize: 13, padding: "0 20px" }}
+              >
+                {saving ? "Saving…" : "Add Employee"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
