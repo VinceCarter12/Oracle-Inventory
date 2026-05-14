@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +56,9 @@ const EMPTY_FORM = { name: "", employeeId: "", email: "", phone: "", siteId: "",
 export default function EmployeesPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [filterDept, setFilterDept] = useState("");
+  const [deptDropOpen, setDeptDropOpen] = useState(false);
+  const deptRef = useRef<HTMLDivElement>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -78,7 +81,20 @@ export default function EmployeesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (deptRef.current && !deptRef.current.contains(e.target as Node)) {
+        setDeptDropOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const uniqueDepts = Array.from(new Set(employees.map(e => e.department?.name).filter(Boolean))) as string[];
+
   const filtered = employees.filter((emp) => {
+    if (filterDept && emp.department?.name !== filterDept) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -144,9 +160,29 @@ export default function EmployeesPage() {
         searchValue={search}
         onSearch={setSearch}
       >
-        <Button variant="ghost" size="sm" className="rounded-full h-8 px-3.5 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white">
-          All Depts ▾
-        </Button>
+        <div style={{ position: "relative" }} ref={deptRef}>
+          <Button
+            variant="ghost" size="sm"
+            className="rounded-full h-8 px-3.5 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white"
+            onClick={() => setDeptDropOpen(!deptDropOpen)}
+          >
+            {filterDept || "All Depts"} ▾
+          </Button>
+          {deptDropOpen && (
+            <div style={{ position: "absolute", right: 0, top: "110%", background: "#1E2124", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "6px 0", zIndex: 50, minWidth: 170, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+              {["", ...uniqueDepts].map(d => (
+                <button key={d || "__all"} type="button"
+                  onClick={() => { setFilterDept(d); setDeptDropOpen(false); }}
+                  style={{ display: "block", width: "100%", textAlign: "left", background: filterDept === d ? "rgba(255,255,255,.08)" : "none", border: "none", cursor: "pointer", color: "#E8E8E8", fontSize: 13, padding: "8px 14px", fontWeight: 500 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = filterDept === d ? "rgba(255,255,255,.08)" : "none")}
+                >
+                  {d || "All Depts"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </TopBar>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>

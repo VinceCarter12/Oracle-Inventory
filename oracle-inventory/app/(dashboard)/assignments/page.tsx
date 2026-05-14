@@ -88,6 +88,13 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Filters
+  const [filterDept, setFilterDept] = useState("");
+  const [filterSite, setFilterSite] = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [openFilter, setOpenFilter] = useState<"dept" | "site" | "sort" | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+
   // New Assignment modal
   const [showAssign, setShowAssign] = useState(false);
   const [assets, setAssets] = useState<LookupAsset[]>([]);
@@ -111,11 +118,14 @@ export default function AssignmentsPage() {
     loadAssignments();
   }, []);
 
-  // Close menu on outside click
+  // Close menus on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpenId(null);
+      }
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setOpenFilter(null);
       }
     }
     document.addEventListener("mousedown", handler);
@@ -165,10 +175,21 @@ export default function AssignmentsPage() {
     }
   }
 
-  const filtered = assignments.filter((a) => {
-    if (activeTab === "All") return true;
-    return a.status === activeTab.toLowerCase();
-  });
+  const uniqueDepts = Array.from(new Set(assignments.map(a => a.employee?.department?.name).filter(Boolean))) as string[];
+  const uniqueSites = Array.from(new Set(assignments.map(a => a.asset.site?.name ?? a.employee?.site?.name).filter(Boolean))) as string[];
+
+  const filtered = assignments
+    .filter((a) => {
+      if (activeTab !== "All" && a.status !== activeTab.toLowerCase()) return false;
+      if (filterDept && a.employee?.department?.name !== filterDept) return false;
+      if (filterSite && (a.asset.site?.name ?? a.employee?.site?.name) !== filterSite) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const da = new Date(a.assignedAt).getTime();
+      const db = new Date(b.assignedAt).getTime();
+      return sortOrder === "newest" ? db - da : da - db;
+    });
 
   const activeCount = assignments.filter((a) => a.status === "active").length;
 
@@ -204,12 +225,79 @@ export default function AssignmentsPage() {
                 · {loading ? "…" : activeCount}
               </span>
             </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["Dept ▾", "Site ▾", "Sort ▾"].map(f => (
-                <Button key={f} variant="ghost" size="sm" className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white">
-                  {f}
+            <div style={{ display: "flex", gap: 8 }} ref={filterRef}>
+              {/* Dept filter */}
+              <div style={{ position: "relative" }}>
+                <Button
+                  variant="ghost" size="sm"
+                  className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white"
+                  onClick={() => setOpenFilter(openFilter === "dept" ? null : "dept")}
+                >
+                  {filterDept || "Dept"} ▾
                 </Button>
-              ))}
+                {openFilter === "dept" && (
+                  <div style={{ position: "absolute", right: 0, top: "110%", background: "#1E2124", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "6px 0", zIndex: 50, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+                    {["", ...uniqueDepts].map(d => (
+                      <button key={d || "__all"} type="button"
+                        onClick={() => { setFilterDept(d); setOpenFilter(null); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", background: filterDept === d ? "rgba(255,255,255,.08)" : "none", border: "none", cursor: "pointer", color: "#E8E8E8", fontSize: 13, padding: "8px 14px", fontWeight: 500 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = filterDept === d ? "rgba(255,255,255,.08)" : "none")}
+                      >
+                        {d || "All Depts"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Site filter */}
+              <div style={{ position: "relative" }}>
+                <Button
+                  variant="ghost" size="sm"
+                  className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white"
+                  onClick={() => setOpenFilter(openFilter === "site" ? null : "site")}
+                >
+                  {filterSite || "Site"} ▾
+                </Button>
+                {openFilter === "site" && (
+                  <div style={{ position: "absolute", right: 0, top: "110%", background: "#1E2124", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "6px 0", zIndex: 50, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+                    {["", ...uniqueSites].map(s => (
+                      <button key={s || "__all"} type="button"
+                        onClick={() => { setFilterSite(s); setOpenFilter(null); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", background: filterSite === s ? "rgba(255,255,255,.08)" : "none", border: "none", cursor: "pointer", color: "#E8E8E8", fontSize: 13, padding: "8px 14px", fontWeight: 500 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = filterSite === s ? "rgba(255,255,255,.08)" : "none")}
+                      >
+                        {s || "All Sites"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Sort filter */}
+              <div style={{ position: "relative" }}>
+                <Button
+                  variant="ghost" size="sm"
+                  className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground border border-white/7 hover:text-white"
+                  onClick={() => setOpenFilter(openFilter === "sort" ? null : "sort")}
+                >
+                  {sortOrder === "newest" ? "Newest" : "Oldest"} ▾
+                </Button>
+                {openFilter === "sort" && (
+                  <div style={{ position: "absolute", right: 0, top: "110%", background: "#1E2124", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "6px 0", zIndex: 50, minWidth: 140, boxShadow: "0 8px 24px rgba(0,0,0,.4)" }}>
+                    {(["newest", "oldest"] as const).map(o => (
+                      <button key={o} type="button"
+                        onClick={() => { setSortOrder(o); setOpenFilter(null); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", background: sortOrder === o ? "rgba(255,255,255,.08)" : "none", border: "none", cursor: "pointer", color: "#E8E8E8", fontSize: 13, padding: "8px 14px", fontWeight: 500 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = sortOrder === o ? "rgba(255,255,255,.08)" : "none")}
+                      >
+                        {o === "newest" ? "Newest first" : "Oldest first"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
