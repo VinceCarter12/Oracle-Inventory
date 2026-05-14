@@ -248,7 +248,7 @@ export default function EmployeesPage() {
                           variant="ghost"
                           size="sm"
                           className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground hover:text-white border border-white/7"
-                          onClick={() => router.push(`/employees/${emp.id}`)}
+                          onClick={() => router.push(`/employees/detail?id=${emp.id}`)}
                         >
                           View
                         </Button>

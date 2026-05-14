@@ -27,7 +27,24 @@ router.get("/", async (_req: AuthRequest, res: Response) => {
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   const employee = await prisma.employee.findUnique({
     where: { id: req.params.id },
-    include,
+    include: {
+      site: { select: { id: true, name: true } },
+      department: { select: { id: true, name: true } },
+      assignments: {
+        orderBy: { assignedAt: "desc" as const },
+        include: {
+          asset: {
+            select: {
+              id: true,
+              name: true,
+              serialNumber: true,
+              condition: true,
+              category: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
   });
   if (!employee) { res.status(404).json({ error: "Employee not found" }); return; }
   res.json(employee);
