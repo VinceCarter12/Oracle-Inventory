@@ -160,14 +160,129 @@ export default function SettingsPage() {
               </Card>
             )}
 
-            {/* Placeholder tabs */}
-            {["Workspace", "Integrations", "Security"].includes(activeTab) && (
+            {/* Workspace */}
+            {activeTab === "Workspace" && (
+              <>
+                <Card>
+                  <CardContent style={{ padding: 22 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 18 }}>Workspace</div>
+                    <div className="grid-form-2" style={{ gap: 14 }}>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <Label className="field-label">Organization Name</Label>
+                        <Input className="field-input mt-1.5" defaultValue="Oracle Petroleum" />
+                      </div>
+                      <div>
+                        <Label className="field-label">Timezone</Label>
+                        <select className="field-input mt-1.5" style={{ width: "100%", height: 38, padding: "0 10px", borderRadius: 8, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "#fff", fontSize: 13 }}>
+                          <option value="Asia/Manila">Asia/Manila (PHT, UTC+8)</option>
+                          <option value="UTC">UTC</option>
+                          <option value="America/New_York">America/New_York (EST)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="field-label">Date Format</Label>
+                        <select className="field-input mt-1.5" style={{ width: "100%", height: 38, padding: "0 10px", borderRadius: 8, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "#fff", fontSize: 13 }}>
+                          <option>MMM DD, YYYY</option>
+                          <option>DD/MM/YYYY</option>
+                          <option>YYYY-MM-DD</option>
+                        </select>
+                      </div>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <Label className="field-label">Asset ID Prefix</Label>
+                        <Input className="field-input mt-1.5" defaultValue="ORC-" placeholder="e.g. ORC-" />
+                        <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 5 }}>Prefix applied to all new asset serial numbers.</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <Button variant="ghost" className="rounded-full h-[34px] px-4 text-xs font-bold border border-white/7 text-muted-foreground hover:text-white">Cancel</Button>
+                  <Button variant="lime" className="rounded-full h-[34px] px-4 text-xs font-bold" onClick={handleSave}>Save changes</Button>
+                </div>
+              </>
+            )}
+
+            {/* Integrations */}
+            {activeTab === "Integrations" && (
               <Card>
-                <CardContent style={{ padding: 40, textAlign: "center", color: "var(--muted-foreground)", fontSize: 13 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", marginBottom: 6 }}>{activeTab}</div>
-                  This section is coming soon.
+                <CardContent style={{ padding: 22 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Integrations</div>
+                  <div style={{ fontSize: 13, color: "var(--muted-foreground)", marginBottom: 20 }}>Connect Oracle Inventory to external tools.</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {[
+                      { name: "Slack", desc: "Send alerts to a Slack channel", connected: false, icon: "💬" },
+                      { name: "Google Sheets", desc: "Sync asset data to a spreadsheet", connected: false, icon: "📊" },
+                      { name: "Webhook", desc: "Push events to a custom endpoint", connected: false, icon: "🔗" },
+                    ].map((int) => (
+                      <div key={int.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "rgba(255,255,255,.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,.07)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <span style={{ fontSize: 22 }}>{int.icon}</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{int.name}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{int.desc}</div>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" className="rounded-full h-8 px-4 text-xs font-bold border border-white/7 text-muted-foreground hover:text-white flex-shrink-0">
+                          Connect
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Security */}
+            {activeTab === "Security" && (
+              <>
+                <Card>
+                  <CardContent style={{ padding: 22 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 18 }}>Change Password</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <Label className="field-label">Current Password</Label>
+                        <Input className="field-input mt-1.5" type="password" placeholder="••••••••" />
+                      </div>
+                      <div>
+                        <Label className="field-label">New Password</Label>
+                        <Input className="field-input mt-1.5" type="password" placeholder="••••••••" />
+                      </div>
+                      <div>
+                        <Label className="field-label">Confirm New Password</Label>
+                        <Input className="field-input mt-1.5" type="password" placeholder="••••••••" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent style={{ padding: 22 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Session</div>
+                    <div style={{ fontSize: 13, color: "var(--muted-foreground)", marginBottom: 16 }}>You are currently signed in. Sessions expire after 8 hours.</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {[
+                        { device: "Chrome · Windows", location: "Manila, PH", current: true },
+                        { device: "Safari · iPhone", location: "Manila, PH", current: false },
+                      ].map((s) => (
+                        <div key={s.device} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", background: "rgba(255,255,255,.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,.07)" }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{s.device} {s.current && <span style={{ fontSize: 10, color: "var(--lime)", fontWeight: 700, marginLeft: 6, background: "rgba(198,255,0,.12)", padding: "2px 6px", borderRadius: 4 }}>Current</span>}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{s.location}</div>
+                          </div>
+                          {!s.current && (
+                            <Button variant="ghost" size="sm" className="rounded-full h-7 px-3 text-xs font-bold border border-white/7 text-muted-foreground hover:text-white">
+                              Revoke
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <Button variant="ghost" className="rounded-full h-[34px] px-4 text-xs font-bold border border-white/7 text-muted-foreground hover:text-white">Cancel</Button>
+                  <Button variant="lime" className="rounded-full h-[34px] px-4 text-xs font-bold" onClick={handleSave}>Update Password</Button>
+                </div>
+              </>
             )}
           </div>
         </div>
