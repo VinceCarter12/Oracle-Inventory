@@ -44,7 +44,7 @@ export default function ReportsPage() {
           ].map((k) => (
             <Card key={k.label}>
               <CardContent style={{ padding: "16px 18px" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>{k.label}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>{k.label}</div>
                 <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginTop: 6 }}>{k.val}</div>
                 <Badge style={k.badgeStyle}>{k.badge}</Badge>
               </CardContent>
@@ -60,7 +60,7 @@ export default function ReportsPage() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Movement by Month</div>
                 <div style={{ display: "flex", gap: 12 }}>
                   {[["var(--lime)", "Transfers"], ["var(--purple)", "Returns"]].map(([c, l]) => (
-                    <span key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}>
+                    <span key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}>
                       <span style={{ width: 10, height: 10, background: c, borderRadius: 2, display: "inline-block" }} />{l}
                     </span>
                   ))}
@@ -127,7 +127,7 @@ export default function ReportsPage() {
             <TableHeader>
               <TableRow style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 {["Report", "Cadence", "Recipients", "Last run", "Status"].map(h => (
-                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>{h}</TableHead>
+                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>

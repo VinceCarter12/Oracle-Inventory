@@ -49,7 +49,7 @@ export default function SitesPage() {
             <CardContent style={{ padding: 20, height: "100%" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Coverage Map</span>
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
                   {loading ? "Loading…" : `${sites.length} active site${sites.length !== 1 ? "s" : ""}`}
                 </span>
               </div>
@@ -95,7 +95,7 @@ export default function SitesPage() {
                 </Card>
               ))
             ) : sites.length === 0 ? (
-              <div style={{ textAlign: "center", color: "var(--muted)", paddingTop: 48, fontSize: 14 }}>No sites found.</div>
+              <div style={{ textAlign: "center", color: "var(--muted-foreground)", paddingTop: 48, fontSize: 14 }}>No sites found.</div>
             ) : (
               sites.map((site, idx) => {
                 const color = SITE_COLORS[idx % SITE_COLORS.length];
@@ -106,14 +106,14 @@ export default function SitesPage() {
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{site.name}</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{site.address ?? "No address"}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{site.address ?? "No address"}</div>
                         </div>
                         <span style={{ fontSize: 18, fontWeight: 800, color }}>{site._count.assets}</span>
                       </div>
                       <div style={{ height: 5, background: "rgba(255,255,255,.06)", borderRadius: "9999px", overflow: "hidden" }}>
                         <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: "9999px" }} />
                       </div>
-                      <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 5 }}>{pct}% of total · {site._count.employees} employee{site._count.employees !== 1 ? "s" : ""}</div>
+                      <div style={{ fontSize: 10, color: "var(--muted-foreground)", marginTop: 5 }}>{pct}% of total · {site._count.employees} employee{site._count.employees !== 1 ? "s" : ""}</div>
                     </CardContent>
                   </Card>
                 );

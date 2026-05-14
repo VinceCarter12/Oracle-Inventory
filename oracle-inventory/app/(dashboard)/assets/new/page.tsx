@@ -16,20 +16,6 @@ type Lookup = {
   sites: { id: string; name: string }[];
 };
 
-const selectStyle: React.CSSProperties = {
-  width: "100%",
-  height: 42,
-  background: "#252829",
-  border: "1px solid rgba(255,255,255,.07)",
-  borderRadius: 10,
-  padding: "0 14px",
-  color: "#fff",
-  fontSize: 13,
-  outline: "none",
-  fontFamily: "inherit",
-  cursor: "pointer",
-};
-
 export default function NewAssetPage() {
   const router = useRouter();
   const [lookup, setLookup] = useState<Lookup>({ categories: [], sites: [] });
@@ -46,7 +32,10 @@ export default function NewAssetPage() {
   });
 
   useEffect(() => {
-    apiFetch("/api/lookup").then((r) => r.json()).then(setLookup).catch(() => {});
+    apiFetch("/api/lookup")
+      .then((r) => r.json())
+      .then(setLookup)
+      .catch(() => toast.error("Failed to load categories and sites."));
   }, []);
 
   function set(field: string, value: string) {
@@ -57,26 +46,36 @@ export default function NewAssetPage() {
     e.preventDefault();
     setSaving(true);
 
-    const res = await apiFetch("/api/assets", {
-      method: "POST",
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await apiFetch("/api/assets", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
 
-    setSaving(false);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save asset.");
+        return;
+      }
 
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Failed to save asset.");
-      return;
+      toast.success("Asset created successfully.");
+      router.push("/assets");
+    } catch {
+      toast.error("Network error — check your connection.");
+    } finally {
+      setSaving(false);
     }
-
-    toast.success("Asset created successfully.");
-    router.push("/assets");
   }
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)", borderRadius: 16 }}>
-      <TopBar title="New Asset" />
+      <TopBar title="New Asset">
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted-foreground)" }}>
+          <a href="/assets" style={{ color: "var(--muted-foreground)", textDecoration: "none" }} className="hover:text-white transition-colors">Assets</a>
+          <span style={{ opacity: 0.4 }}>/</span>
+          <span style={{ color: "#fff", fontWeight: 600 }}>New</span>
+        </div>
+      </TopBar>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
         <form onSubmit={handleSubmit}>
           <Card style={{ maxWidth: 680, border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -108,7 +107,7 @@ export default function NewAssetPage() {
 
                 <div>
                   <Label className="field-label">Category</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
                     <option value="">— Select category —</option>
                     {lookup.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -116,7 +115,7 @@ export default function NewAssetPage() {
 
                 <div>
                   <Label className="field-label">Site</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.siteId} onChange={(e) => set("siteId", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.siteId} onChange={(e) => set("siteId", e.target.value)}>
                     <option value="">— Select site —</option>
                     {lookup.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -124,7 +123,7 @@ export default function NewAssetPage() {
 
                 <div>
                   <Label className="field-label">Condition</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.condition} onChange={(e) => set("condition", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.condition} onChange={(e) => set("condition", e.target.value)}>
                     <option value="usable">Usable</option>
                     <option value="for_repair">For Repair</option>
                     <option value="for_disposal">For Disposal</option>
@@ -133,7 +132,7 @@ export default function NewAssetPage() {
 
                 <div>
                   <Label className="field-label">Ownership</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.ownership} onChange={(e) => set("ownership", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.ownership} onChange={(e) => set("ownership", e.target.value)}>
                     <option value="company">Company</option>
                     <option value="personal">Personal</option>
                   </select>
@@ -163,8 +162,8 @@ export default function NewAssetPage() {
                 </Button>
                 <Button
                   type="submit"
+                  variant="lime"
                   className="rounded-full h-[34px] px-4 text-xs font-bold"
-                  style={{ background: "var(--lime)", color: "#0F1112" }}
                   disabled={saving}
                 >
                   {saving ? "Saving…" : "Save Asset"}

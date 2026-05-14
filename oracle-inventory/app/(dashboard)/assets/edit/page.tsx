@@ -17,19 +17,6 @@ type Lookup = {
   sites: { id: string; name: string }[];
 };
 
-const selectStyle: React.CSSProperties = {
-  width: "100%",
-  height: 42,
-  background: "#252829",
-  border: "1px solid rgba(255,255,255,.07)",
-  borderRadius: 10,
-  padding: "0 14px",
-  color: "#fff",
-  fontSize: 13,
-  outline: "none",
-  fontFamily: "inherit",
-  cursor: "pointer",
-};
 
 function EditAssetContent() {
   const searchParams = useSearchParams();
@@ -66,7 +53,10 @@ function EditAssetContent() {
       });
       setLookup(lk);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      toast.error("Failed to load asset data.");
+      setLoading(false);
+    });
   }, [id]);
 
   function set(field: string, value: string) {
@@ -77,21 +67,25 @@ function EditAssetContent() {
     e.preventDefault();
     setSaving(true);
 
-    const res = await apiFetch(`/api/assets/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await apiFetch(`/api/assets/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(form),
+      });
 
-    setSaving(false);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save.");
+        return;
+      }
 
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Failed to save.");
-      return;
+      toast.success("Asset updated successfully.");
+      router.push(`/assets/detail?id=${id}`);
+    } catch {
+      toast.error("Network error — check your connection.");
+    } finally {
+      setSaving(false);
     }
-
-    toast.success("Asset updated successfully.");
-    router.push(`/assets/detail?id=${id}`);
   }
 
   if (loading) {
@@ -119,7 +113,15 @@ function EditAssetContent() {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)", borderRadius: 16 }}>
-      <TopBar title="Edit Asset" />
+      <TopBar title="Edit Asset">
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted-foreground)" }}>
+          <a href="/assets" style={{ color: "var(--muted-foreground)", textDecoration: "none" }} className="hover:text-white transition-colors">Assets</a>
+          <span style={{ opacity: 0.4 }}>/</span>
+          <a href={`/assets/detail?id=${id}`} style={{ color: "var(--muted-foreground)", textDecoration: "none" }} className="hover:text-white transition-colors">Detail</a>
+          <span style={{ opacity: 0.4 }}>/</span>
+          <span style={{ color: "#fff", fontWeight: 600 }}>Edit</span>
+        </div>
+      </TopBar>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
         <form onSubmit={handleSubmit}>
           <Card style={{ maxWidth: 680, border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -149,7 +151,7 @@ function EditAssetContent() {
 
                 <div>
                   <Label className="field-label">Category</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
                     <option value="">— Select category —</option>
                     {lookup.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -157,7 +159,7 @@ function EditAssetContent() {
 
                 <div>
                   <Label className="field-label">Site</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.siteId} onChange={(e) => set("siteId", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.siteId} onChange={(e) => set("siteId", e.target.value)}>
                     <option value="">— Select site —</option>
                     {lookup.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -165,7 +167,7 @@ function EditAssetContent() {
 
                 <div>
                   <Label className="field-label">Condition</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.condition} onChange={(e) => set("condition", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.condition} onChange={(e) => set("condition", e.target.value)}>
                     <option value="usable">Usable</option>
                     <option value="for_repair">For Repair</option>
                     <option value="for_disposal">For Disposal</option>
@@ -174,7 +176,7 @@ function EditAssetContent() {
 
                 <div>
                   <Label className="field-label">Ownership</Label>
-                  <select style={selectStyle} className="mt-1.5" value={form.ownership} onChange={(e) => set("ownership", e.target.value)}>
+                  <select className="field-select mt-1.5" value={form.ownership} onChange={(e) => set("ownership", e.target.value)}>
                     <option value="company">Company</option>
                     <option value="personal">Personal</option>
                   </select>
@@ -203,8 +205,8 @@ function EditAssetContent() {
                 </Button>
                 <Button
                   type="submit"
+                  variant="lime"
                   className="rounded-full h-[34px] px-4 text-xs font-bold"
-                  style={{ background: "var(--lime)", color: "#0F1112" }}
                   disabled={saving}
                 >
                   {saving ? "Saving…" : "Save Changes"}

@@ -6,14 +6,18 @@ interface TopBarProps {
   title?: string;
   actionLabel?: string;
   onAction?: () => void;
+  searchValue?: string;
+  onSearch?: (q: string) => void;
   children?: React.ReactNode;
 }
 
 export default function TopBar({
-  placeholder = "Start Search Here…",
+  placeholder = "Search…",
   title,
   actionLabel,
   onAction,
+  searchValue,
+  onSearch,
   children,
 }: TopBarProps) {
   return (
@@ -22,7 +26,12 @@ export default function TopBar({
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B5563" strokeWidth="2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
         </svg>
-        <input placeholder={placeholder} />
+        <input
+          placeholder={placeholder}
+          value={searchValue ?? ""}
+          onChange={onSearch ? (e) => onSearch(e.target.value) : undefined}
+          readOnly={!onSearch}
+        />
       </div>
 
       {title ? (
@@ -41,10 +50,10 @@ export default function TopBar({
 
       {actionLabel && (
         <Button
+          variant="lime"
           size="sm"
           onClick={onAction}
           className="rounded-full gap-1.5 font-bold text-xs h-[34px] px-3.5"
-          style={{ background: "var(--lime)", color: "#0F1112" }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
@@ -68,7 +77,7 @@ export default function TopBar({
       </Button>
 
       <Avatar style={{ width: 34, height: 34, cursor: "pointer" }}>
-        <AvatarFallback style={{ background: "var(--lime)", color: "#0F1112", fontSize: 12, fontWeight: 800 }}>
+        <AvatarFallback style={{ background: "#252829", color: "#9CA3AF", fontSize: 12, fontWeight: 800 }}>
           SJ
         </AvatarFallback>
       </Avatar>

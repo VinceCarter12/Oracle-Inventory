@@ -65,7 +65,7 @@ export default function SettingsPage() {
                     <button style={{ fontSize: 12, fontWeight: 600, color: "var(--lime)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
                       Upload photo
                     </button>
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>PNG or JPG, max 2MB</div>
+                    <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 3 }}>PNG or JPG, max 2MB</div>
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -94,7 +94,7 @@ export default function SettingsPage() {
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0" }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.label}</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{t.sub}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{t.sub}</div>
                       </div>
                       <Switch
                         checked={switches[i]}

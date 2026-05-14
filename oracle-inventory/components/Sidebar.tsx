@@ -128,7 +128,7 @@ export default function Sidebar() {
 
       {/* User avatar */}
       <Avatar className="mt-auto cursor-pointer" style={{ width: 32, height: 32 }}>
-        <AvatarFallback style={{ background: "var(--lime)", color: "#0F1112", fontSize: 11, fontWeight: 800 }}>
+        <AvatarFallback style={{ background: "#252829", color: "#9CA3AF", fontSize: 11, fontWeight: 800 }}>
           SJ
         </AvatarFallback>
       </Avatar>

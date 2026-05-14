@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/auth";
 import {
   Table,
@@ -111,6 +112,8 @@ function AssetDetailContent() {
   const router = useRouter();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) { setLoading(false); return; }
@@ -121,13 +124,21 @@ function AssetDetailContent() {
   }, [id]);
 
   async function handleDelete() {
-    if (!confirm("Delete this asset? This cannot be undone.")) return;
-    const res = await apiFetch(`/api/assets/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Asset deleted.");
-      router.push("/assets");
-    } else {
-      toast.error("Failed to delete asset.");
+    setDeleting(true);
+    try {
+      const res = await apiFetch(`/api/assets/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Asset deleted.");
+        router.push("/assets");
+      } else {
+        toast.error("Failed to delete asset.");
+        setShowDelete(false);
+      }
+    } catch {
+      toast.error("Network error — check your connection.");
+      setShowDelete(false);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -135,7 +146,7 @@ function AssetDetailContent() {
 
   if (!asset) {
     return (
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", borderRadius: 16, color: "var(--muted)", fontSize: 14 }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", borderRadius: 16, color: "var(--muted-foreground)", fontSize: 14 }}>
         Asset not found.
       </div>
     );
@@ -154,11 +165,30 @@ function AssetDetailContent() {
           size="sm"
           className="rounded-full h-8 px-3.5 text-xs font-semibold border border-white/7"
           style={{ color: "var(--coral)" }}
-          onClick={handleDelete}
+          onClick={() => setShowDelete(true)}
         >
           Delete
         </Button>
       </TopBar>
+
+      <Dialog open={showDelete} onOpenChange={setShowDelete}>
+        <DialogContent showCloseButton={false} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete asset?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove <strong style={{ color: "#E8E8E8" }}>{asset?.name}</strong> and its movement history. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="border-white/10 text-muted-foreground hover:text-white" onClick={() => setShowDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete asset"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
 
@@ -168,7 +198,7 @@ function AssetDetailContent() {
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{asset.name}</div>
-                {asset.serialNumber && <div style={{ fontSize: 12, color: "var(--muted)", fontFamily: "monospace", marginTop: 3 }}>{asset.serialNumber}</div>}
+                {asset.serialNumber && <div style={{ fontSize: 12, color: "var(--muted-foreground)", fontFamily: "var(--font-mono, 'IBM Plex Mono', monospace)", marginTop: 3 }}>{asset.serialNumber}</div>}
               </div>
               {conditionBadge(asset.condition)}
             </div>
@@ -181,14 +211,14 @@ function AssetDetailContent() {
                 { label: "Registered", value: fmt(asset.createdAt) },
               ].map((f) => (
                 <div key={f.label}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>{f.label}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>{f.label}</div>
                   <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{f.value}</div>
                 </div>
               ))}
             </div>
 
             {asset.description && (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 13, color: "var(--muted)" }}>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 13, color: "var(--muted-foreground)" }}>
                 {asset.description}
               </div>
             )}
@@ -206,10 +236,10 @@ function AssetDetailContent() {
                 </div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{activeAssignment.employee.name}</div>
-                  {activeAssignment.employee.employeeId && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{activeAssignment.employee.employeeId}</div>}
+                  {activeAssignment.employee.employeeId && <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2, fontFamily: "var(--font-mono, 'IBM Plex Mono', monospace)" }}>{activeAssignment.employee.employeeId}</div>}
                 </div>
                 <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                  <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>Since</div>
+                  <div style={{ fontSize: 10, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Since</div>
                   <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{fmt(activeAssignment.assignedAt)}</div>
                 </div>
               </div>
@@ -225,7 +255,7 @@ function AssetDetailContent() {
               <TableHeader>
                 <TableRow style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
                   {["Event", "Employee", "Notes", "Date"].map((h) => (
-                    <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>{h}</TableHead>
+                    <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>{h}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>

@@ -97,7 +97,7 @@ export default function AssignmentsPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>
               Active assignments{" "}
-              <span style={{ color: "var(--muted)", fontWeight: 500 }}>
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 · {loading ? "…" : activeCount}
               </span>
             </span>
@@ -114,7 +114,7 @@ export default function AssignmentsPage() {
             <TableHeader>
               <TableRow style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 {["Asset", "Serial No.", "Assignee", "Dept", "Site", "Since", "Status", ""].map(h => (
-                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>{h}</TableHead>
+                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -129,7 +129,7 @@ export default function AssignmentsPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} style={{ textAlign: "center", color: "var(--muted)", padding: "32px 0" }}>
+                  <TableCell colSpan={8} style={{ textAlign: "center", color: "var(--muted-foreground)", padding: "32px 0" }}>
                     No assignments found.
                   </TableCell>
                 </TableRow>
@@ -152,7 +152,7 @@ export default function AssignmentsPage() {
             </TableBody>
           </Table>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "var(--muted)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "var(--muted-foreground)" }}>
             <span>Showing {filtered.length} of {assignments.length}</span>
           </div>
         </div>

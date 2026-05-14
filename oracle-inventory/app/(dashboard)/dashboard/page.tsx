@@ -71,9 +71,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       document.querySelectorAll<HTMLElement>(".progress-fill[data-w]").forEach((el) => {
-        el.style.width = "0";
+        el.style.setProperty("--fill", "0");
         requestAnimationFrame(() => {
-          el.style.width = el.dataset.w + "%";
+          el.style.setProperty("--fill", String(Number(el.dataset.w) / 100));
         });
       });
     }
@@ -118,7 +118,7 @@ export default function DashboardPage() {
           const KPI_DATA = [
             { label: "Total Assets", fill: "linear-gradient(90deg,#3B82F6,#60A5FA)", w: kpi.total > 0 ? 83 : 0, amount: String(kpi.total), sub: "Inventory Count", pct: `${kpi.total} items`, pctColor: "#fff" },
             { label: "Assigned Assets", fill: "linear-gradient(90deg,#8BBF00,var(--lime))", w: assignedPct, amount: String(kpi.assigned), sub: "Active Assignments", pct: `${assignedPct}%`, pctColor: "#fff" },
-            { label: "For Repair / Disposal", fill: "linear-gradient(90deg,#C53030,var(--coral))", w: attentionPct, amount: String(kpi.needsAttention), sub: "Requires Attention", pct: attentionPct > 20 ? "Over limit" : `${attentionPct}%`, pctColor: kpi.needsAttention > 0 ? "var(--coral)" : "var(--muted)" },
+            { label: "For Repair / Disposal", fill: "linear-gradient(90deg,#C53030,var(--coral))", w: attentionPct, amount: String(kpi.needsAttention), sub: "Requires Attention", pct: attentionPct > 20 ? "Over limit" : `${attentionPct}%`, pctColor: kpi.needsAttention > 0 ? "var(--coral)" : "var(--muted-foreground)" },
           ];
           return (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 14 }}>
@@ -128,16 +128,16 @@ export default function DashboardPage() {
                   <Card key={k.label} style={{ position: "relative", overflow: "hidden" }}>
                     <CardContent style={{ padding: "16px 18px" }}>
                       <div style={{ position: "absolute", top: 12, right: 12, width: 20, height: 20, borderRadius: "9999px", background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: "#4B5563", fontSize: 12 }}>×</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", letterSpacing: ".05em", textTransform: "uppercase" }}>{k.label}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", letterSpacing: ".05em", textTransform: "uppercase" }}>{k.label}</div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>Live count</span>
+                        <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>Live count</span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>{k.amount}</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-fill" data-w={k.w} style={{ background: k.fill }} />
                       </div>
                       <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>{k.amount}</div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>
                         <span>{k.sub}</span>
                         <span style={{ color: k.pctColor, fontWeight: 700 }}>{k.pct}</span>
                       </div>
@@ -168,10 +168,10 @@ export default function DashboardPage() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="var(--lime)" strokeWidth="2" /><path d="M3 20a6 6 0 0 1 12 0" stroke="var(--lime)" strokeWidth="2" strokeLinecap="round" fill="none" /></svg>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", flex: 1 }}>New Asset Movements</h3>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Transfers</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Returns</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Transfers</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Returns</span>
                     </div>
-                    <span style={{ color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>···</span>
+                    <span style={{ color: "var(--muted-foreground)", fontSize: 18, cursor: "pointer" }}>···</span>
                   </div>
                   <svg viewBox="0 0 560 180" style={{ width: "100%", height: 180 }}>
                     <defs>
@@ -221,10 +221,10 @@ export default function DashboardPage() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="var(--purple)" strokeWidth="2" fill="none" /></svg>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", flex: 1 }}>Assignment Status</h3>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Assigned</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Unassigned</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Assigned</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Unassigned</span>
                     </div>
-                    <span style={{ color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>···</span>
+                    <span style={{ color: "var(--muted-foreground)", fontSize: 18, cursor: "pointer" }}>···</span>
                   </div>
                   {(() => {
                     const assignedPct = kpi.total > 0 ? Math.round((kpi.assigned / kpi.total) * 100) : 0;
@@ -240,11 +240,11 @@ export default function DashboardPage() {
                             </svg>
                             <div style={{ position: "absolute", textAlign: "center" }}>
                               <span style={{ display: "block", fontSize: 18, fontWeight: 800, color: "#fff", lineHeight: 1 }}>{assignedPct}%</span>
-                              <small style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>Assigned</small>
+                              <small style={{ fontSize: 10, color: "var(--muted-foreground)", fontWeight: 600 }}>Assigned</small>
                             </div>
                           </div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginTop: 6 }}>Assigned</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{kpi.assigned} of {kpi.total}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{kpi.assigned} of {kpi.total}</div>
                         </div>
                         <div style={{ textAlign: "center" }}>
                           <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: 120, height: 120 }}>
@@ -255,11 +255,11 @@ export default function DashboardPage() {
                             </svg>
                             <div style={{ position: "absolute", textAlign: "center" }}>
                               <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "#fff", lineHeight: 1 }}>{100 - assignedPct}%</span>
-                              <small style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>Open</small>
+                              <small style={{ fontSize: 10, color: "var(--muted-foreground)", fontWeight: 600 }}>Open</small>
                             </div>
                           </div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginTop: 6 }}>Unassigned</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{unassigned} of {kpi.total}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{unassigned} of {kpi.total}</div>
                         </div>
                       </div>
                     );
@@ -275,12 +275,12 @@ export default function DashboardPage() {
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", flex: 1 }}>Inventory by Department</h3>
                     <div style={{ display: "flex", gap: 12 }}>
                       {[["var(--lime)", "IT"], ["var(--purple)", "Finance"], ["#4B5563", "Ops"]].map(([c, l]) => (
-                        <span key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}>
+                        <span key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}>
                           <span style={{ width: 10, height: 10, borderRadius: "9999px", background: c, display: "inline-block" }} />{l}
                         </span>
                       ))}
                     </div>
-                    <span style={{ color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>···</span>
+                    <span style={{ color: "var(--muted-foreground)", fontSize: 18, cursor: "pointer" }}>···</span>
                   </div>
                   {[
                     { label: "IT", segs: [["44%", "var(--lime)", ".9"], ["14%", "var(--purple)", ".7"], ["8%", "#4B5563", ".6"]], total: "86" },
@@ -309,7 +309,7 @@ export default function DashboardPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 3v18h18" stroke="var(--purple)" strokeWidth="2" strokeLinecap="round" fill="none" /><rect x="7" y="12" width="3" height="6" rx="1" fill="var(--purple)" /><rect x="12" y="8" width="3" height="10" rx="1" fill="var(--purple)" /><rect x="17" y="5" width="3" height="13" rx="1" fill="var(--purple)" /></svg>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", flex: 1 }}>Asset Health Trend</h3>
-                    <span style={{ color: "var(--muted)", fontSize: 18, cursor: "pointer" }}>···</span>
+                    <span style={{ color: "var(--muted-foreground)", fontSize: 18, cursor: "pointer" }}>···</span>
                   </div>
                   <div style={{ position: "relative" }}>
                     <div style={{ position: "absolute", top: 0, right: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -340,8 +340,8 @@ export default function DashboardPage() {
                       </svg>
                     </div>
                     <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Usable assets</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Repair queue</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--lime)", display: "inline-block" }} />Usable assets</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted-foreground)" }}><span style={{ width: 10, height: 10, borderRadius: "9999px", background: "var(--purple)", display: "inline-block" }} />Repair queue</span>
                     </div>
                   </div>
                 </CardContent>

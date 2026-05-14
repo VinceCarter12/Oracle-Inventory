@@ -101,9 +101,9 @@ export default function EmployeesPage() {
             ].map(([label, val, sub]) => (
               <Card key={label}>
                 <CardContent style={{ padding: "16px 18px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginTop: 4 }}>{val}</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{sub}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{sub}</div>
                 </CardContent>
               </Card>
             ))
@@ -116,7 +116,7 @@ export default function EmployeesPage() {
             <TableHeader>
               <TableRow style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 {["Employee", "Department", "Site", "Assets", "Utilization", ""].map((h) => (
-                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</TableHead>
+                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -137,7 +137,7 @@ export default function EmployeesPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} style={{ textAlign: "center", padding: "40px 24px", color: "var(--muted)", fontSize: 13 }}>
+                  <TableCell colSpan={6} style={{ textAlign: "center", padding: "40px 24px", color: "var(--muted-foreground)", fontSize: 13 }}>
                     {search ? `No employees match "${search}"` : "No employees found."}
                   </TableCell>
                 </TableRow>
@@ -164,14 +164,14 @@ export default function EmployeesPage() {
                       <TableCell className="text-muted-foreground">{emp.site?.name ?? "—"}</TableCell>
                       <TableCell>
                         <span className="font-semibold text-white">{assigned}</span>
-                        <span style={{ color: "var(--muted)", fontWeight: 400 }}> active</span>
+                        <span style={{ color: "var(--muted-foreground)", fontWeight: 400 }}> active</span>
                       </TableCell>
                       <TableCell>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,.06)", borderRadius: "9999px", overflow: "hidden", minWidth: 60 }}>
                             <div style={{ height: "100%", width: assigned > 0 ? "100%" : "0%", background: bg, borderRadius: "9999px" }} />
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", minWidth: 32, textAlign: "right" }}>{pct}%</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", minWidth: 32, textAlign: "right" }}>{pct}%</span>
                         </div>
                       </TableCell>
                       <TableCell>

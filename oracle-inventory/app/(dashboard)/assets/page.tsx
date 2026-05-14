@@ -91,6 +91,8 @@ export default function AssetsPage() {
         title="Assets"
         actionLabel="Add Asset"
         onAction={() => router.push("/assets/new")}
+        searchValue={search}
+        onSearch={setSearch}
       >
         <Tabs value={condition} onValueChange={setCondition}>
           <TabsList className="h-9 rounded-full px-1 gap-0.5" style={{ background: "#1E2124", border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -113,7 +115,7 @@ export default function AssetsPage() {
             <TableHeader>
               <TableRow style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 {["Asset", "Serial No.", "Category", "Site", "Condition", "Ownership", "Assigned To", ""].map((h) => (
-                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</TableHead>
+                  <TableHead key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -154,7 +156,7 @@ export default function AssetsPage() {
                     <TableCell className="text-muted-foreground">{a.site?.name ?? "—"}</TableCell>
                     <TableCell>{conditionBadge(a.condition)}</TableCell>
                     <TableCell className="text-muted-foreground capitalize">{a.ownership}</TableCell>
-                    <TableCell style={{ color: assignee === "—" ? "var(--muted)" : "#fff" }}>{assignee}</TableCell>
+                    <TableCell style={{ color: assignee === "—" ? "var(--muted-foreground)" : "#fff" }}>{assignee}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" render={<Link href={`/assets/detail?id=${a.id}`} />} className="rounded-full h-7 px-3 text-xs font-semibold text-muted-foreground hover:text-white border border-white/7">
                         View

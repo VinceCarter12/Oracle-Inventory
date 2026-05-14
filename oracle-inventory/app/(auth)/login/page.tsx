@@ -12,12 +12,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const inputStyle: React.CSSProperties = {
   width: "100%",
   height: 44,
-  background: "#FAFAFA",
-  border: "1.5px solid #E4E4DE",
+  background: "#252829",
+  border: "1px solid rgba(255,255,255,.07)",
   borderRadius: 10,
   padding: "0 14px",
   fontSize: 13,
-  color: "#1C1E21",
+  color: "#E8E8E8",
   outline: "none",
   fontFamily: "inherit",
   transition: "border-color .15s",
@@ -60,7 +60,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden", background: "#F2F2EE" }}>
+    <div style={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden", background: "#16181A" }}>
 
       {/* ── Left panel ──────────────────────────────────────────────── */}
       <div style={{
@@ -69,7 +69,7 @@ export default function LoginPage() {
         display: "flex",
         flexDirection: "column",
         padding: "40px 48px",
-        background: "#F2F2EE",
+        background: "#16181A",
         position: "relative",
         zIndex: 1,
       }}>
@@ -78,10 +78,10 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/oracle-logo.png" alt="Oracle Petroleum" width={40} height={40} style={{ objectFit: "contain", display: "block" }} />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#1C1E21", letterSpacing: "-.01em", lineHeight: 1.1 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#E8E8E8", letterSpacing: "-.01em", lineHeight: 1.1 }}>
               ORACLE
             </div>
-            <div style={{ fontSize: 9, fontWeight: 600, color: "#8A8A82", letterSpacing: ".12em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "#6B7280", letterSpacing: ".12em", textTransform: "uppercase" }}>
               Petroleum
             </div>
           </div>
@@ -89,30 +89,29 @@ export default function LoginPage() {
 
         {/* Form card */}
         <Card style={{
-          background: "#FFFFFF",
+          background: "#1E2124",
           borderRadius: 20,
-          boxShadow: "0 4px 32px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+          border: "1px solid rgba(255,255,255,0.07)",
           marginTop: 24,
-          border: "none",
         }}>
           <CardContent style={{ padding: "40px 40px 36px" }}>
             <h1 style={{
               fontSize: 26,
               fontWeight: 800,
-              color: "#1C1E21",
+              color: "#E8E8E8",
               letterSpacing: "-.025em",
               marginBottom: 6,
             }}>
               Admin Login
             </h1>
-            <p style={{ fontSize: 13, color: "#8A8A82", marginBottom: 28, fontWeight: 400 }}>
-              Please enter your credentials to continue.
+            <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 28, fontWeight: 400 }}>
+              Enter your credentials to continue.
             </p>
 
             <form onSubmit={handleSubmit}>
               {/* Email */}
               <div style={{ marginBottom: 16 }}>
-                <Label style={{ fontSize: 12, fontWeight: 600, color: "#4A4A44", marginBottom: 6, display: "block" }}>
+                <Label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: ".05em" }}>
                   Email address
                 </Label>
                 <input
@@ -121,8 +120,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}
-                  onFocus={e => (e.target.style.borderColor = "#1C1E21")}
-                  onBlur={e => (e.target.style.borderColor = "#E4E4DE")}
+                  onFocus={e => (e.target.style.borderColor = "var(--lime)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,.07)")}
                   required
                   autoFocus
                 />
@@ -130,7 +129,7 @@ export default function LoginPage() {
 
               {/* Password */}
               <div style={{ marginBottom: error ? 12 : 10 }}>
-                <Label style={{ fontSize: 12, fontWeight: 600, color: "#4A4A44", marginBottom: 6, display: "block" }}>
+                <Label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: ".05em" }}>
                   Password
                 </Label>
                 <div style={{ position: "relative" }}>
@@ -140,8 +139,8 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     style={{ ...inputStyle, paddingRight: 44 }}
-                    onFocus={e => (e.target.style.borderColor = "#1C1E21")}
-                    onBlur={e => (e.target.style.borderColor = "#E4E4DE")}
+                    onFocus={e => (e.target.style.borderColor = "var(--lime)")}
+                    onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,.07)")}
                     required
                   />
                   <Button
@@ -151,7 +150,7 @@ export default function LoginPage() {
                     onClick={() => setShowPass(v => !v)}
                     style={{
                       position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-                      width: 32, height: 32, color: "#8A8A82",
+                      width: 32, height: 32, color: "#6B7280",
                     }}
                   >
                     {showPass ? (
@@ -173,12 +172,12 @@ export default function LoginPage() {
               {/* Error */}
               {error && (
                 <div style={{
-                  background: "rgba(220,38,38,.08)",
-                  border: "1px solid rgba(220,38,38,.2)",
+                  background: "rgba(255,90,78,.1)",
+                  border: "1px solid rgba(255,90,78,.2)",
                   borderRadius: 8,
                   padding: "9px 12px",
                   fontSize: 12,
-                  color: "#DC2626",
+                  color: "var(--coral)",
                   marginBottom: 12,
                 }}>
                   {error}
@@ -187,7 +186,7 @@ export default function LoginPage() {
 
               {/* Forgot password */}
               <div style={{ textAlign: "right", marginBottom: 24 }}>
-                <a href="#" style={{ fontSize: 12, color: "#4A4A44", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                <a href="#" style={{ fontSize: 12, color: "#6B7280", textDecoration: "underline", textUnderlineOffset: 2 }}>
                   Forgot password?
                 </a>
               </div>
@@ -195,8 +194,8 @@ export default function LoginPage() {
               {/* Submit */}
               <Button
                 type="submit"
-                className="w-full h-[46px] text-sm font-bold tracking-tight"
-                style={{ background: "#1C1E21", color: "#FFFFFF", borderRadius: 10 }}
+                variant="lime"
+                className="w-full h-[46px] text-sm font-bold tracking-tight rounded-xl"
                 disabled={loading}
               >
                 {loading ? "Signing in…" : "Sign in"}
@@ -210,7 +209,7 @@ export default function LoginPage() {
           marginTop: "auto",
           paddingTop: 32,
           fontSize: 11,
-          color: "#B0B0A8",
+          color: "#4B5563",
           textAlign: "center",
           letterSpacing: ".01em",
         }}>
@@ -236,7 +235,7 @@ export default function LoginPage() {
         <div style={{
           position: "absolute",
           inset: 0,
-          background: "linear-gradient(to right, rgba(242,242,238,0.5) 0%, transparent 18%)",
+          background: "linear-gradient(to right, rgba(22,24,26,0.75) 0%, transparent 22%)",
           pointerEvents: "none",
         }} />
         <div style={{ position: "absolute", bottom: 28, left: 32, right: 32 }}>
@@ -244,15 +243,15 @@ export default function LoginPage() {
             display: "inline-flex",
             alignItems: "center",
             gap: 8,
-            background: "rgba(255,255,255,0.18)",
+            background: "rgba(22,24,26,0.72)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid rgba(255,255,255,0.3)",
+            border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 12,
             padding: "10px 16px",
           }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#C6FF00", flexShrink: 0 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#fff", letterSpacing: ".01em" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#E8E8E8", letterSpacing: ".01em" }}>
               Oracle Petroleum Corporation Headquarters
             </span>
           </div>
