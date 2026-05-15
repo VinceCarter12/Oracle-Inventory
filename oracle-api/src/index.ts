@@ -6,6 +6,11 @@ import lookupRoutes from "./routes/lookup";
 import employeesRoutes from "./routes/employees";
 import sitesRoutes from "./routes/sites";
 import assignmentsRoutes from "./routes/assignments";
+import reportsRoutes from "./routes/reports";
+import turnoverRoutes from "./routes/turnover";
+import usersRoutes from "./routes/users";
+import categoriesRoutes from "./routes/categories";
+import departmentsRoutes from "./routes/departments";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -29,6 +34,11 @@ app.use("/api/lookup", lookupRoutes);
 app.use("/api/employees", employeesRoutes);
 app.use("/api/sites", sitesRoutes);
 app.use("/api/assignments", assignmentsRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/turnover", turnoverRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/categories", categoriesRoutes);
+app.use("/api/departments", departmentsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Oracle API running on port ${PORT}`);

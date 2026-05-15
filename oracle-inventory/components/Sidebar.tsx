@@ -67,6 +67,19 @@ const NAV = [
     ),
   },
   {
+    id: "turnover",
+    href: "/turnover",
+    label: "Turnover",
+    svg: (
+      <>
+        <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="2" fill="none" />
+        <path d="M2 20a6 6 0 0 1 10-4.47" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+        <path d="M16 11l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M20 15h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      </>
+    ),
+  },
+  {
     id: "sites",
     href: "/sites",
     label: "Sites",

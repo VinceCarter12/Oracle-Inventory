@@ -1,7 +1,7 @@
 "use client";
 
 import TopBar from "@/components/TopBar";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface Site {
   id: string;
@@ -74,6 +76,16 @@ function SiteDetailContent() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingDept, setAddingDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [deptSaving, setDeptSaving] = useState(false);
+
+  const refreshSite = useCallback(() => {
+    if (!id) return;
+    apiFetch(`/api/sites/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setSite(data); });
+  }, [id]);
 
   useEffect(() => {
     if (!id) { setLoading(false); return; }
@@ -83,14 +95,26 @@ function SiteDetailContent() {
       apiFetch("/api/employees").then(r => r.json()),
     ]).then(([siteData, assetsData, empData]) => {
       setSite(siteData);
-      setAssets((assetsData as Asset[]).filter((a: Asset) => {
-        // filter by siteId — we'll match by site name from the asset's site relation
-        return true; // will filter below after we have site name
-      }));
+      setAssets(assetsData as Asset[]);
       setEmployees(empData);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id]);
+
+  async function handleAddDept() {
+    if (!newDeptName.trim()) return;
+    setDeptSaving(true);
+    const r = await apiFetch("/api/departments", {
+      method: "POST",
+      body: JSON.stringify({ name: newDeptName.trim(), siteId: id }),
+    });
+    setDeptSaving(false);
+    if (r.ok) {
+      setNewDeptName("");
+      setAddingDept(false);
+      refreshSite();
+    }
+  }
 
   if (loading) return <DetailSkeleton />;
 
@@ -144,13 +168,46 @@ function SiteDetailContent() {
               ))}
             </div>
 
-            {site.departments.length > 0 && (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: site.departments.length > 0 ? 10 : 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: ".05em" }}>Departments</span>
+                {!addingDept && (
+                  <button
+                    onClick={() => setAddingDept(true)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--lime)", fontSize: 11, fontWeight: 600 }}
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+              {addingDept && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <Input
+                    className="field-input"
+                    placeholder="Department name…"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAddDept(); if (e.key === "Escape") { setAddingDept(false); setNewDeptName(""); } }}
+                    autoFocus
+                    style={{ flex: 1, height: 32, fontSize: 12 }}
+                  />
+                  <Button variant="lime" size="sm" className="rounded-full h-8 px-3 text-xs font-bold flex-shrink-0" onClick={handleAddDept} disabled={deptSaving || !newDeptName.trim()}>
+                    Save
+                  </Button>
+                  <Button variant="ghost" size="sm" className="rounded-full h-8 px-3 text-xs font-bold border border-white/7 text-muted-foreground flex-shrink-0" onClick={() => { setAddingDept(false); setNewDeptName(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {site.departments.map(d => (
                   <Badge key={d.id} style={{ background: "rgba(255,255,255,.07)", color: "#E8E8E8", borderColor: "transparent" }}>{d.name}</Badge>
                 ))}
+                {site.departments.length === 0 && !addingDept && (
+                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No departments yet.</span>
+                )}
               </div>
-            )}
+            </div>
 
             {(forRepair > 0 || forDisposal > 0) && (
               <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
