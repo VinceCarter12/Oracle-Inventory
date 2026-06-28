@@ -7,7 +7,297 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  permissions RolePermission[]
+  users       SystemUser[]
+}
+
+model Permission {
+  id            String           @id @default(cuid())
+  key           String           @unique
+  description   String?
+  roles         RolePermission[]
+  userOverrides UserPermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  granted      Boolean    @default(true)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+}
+
+model SystemUser {
+  id                  String                @id @default(cuid())
+  name                String
+  email               String                @unique
+  password            String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  phone               String?
+  position            String?
+  roleId              String?
+  status              UserStatus            @default(active)
+  mustChangePassword  Boolean               @default(false)
+  branchId            String?
+  activityLogs        ActivityLog[]
+  mappingPresets      ColumnMappingPreset[]
+  importHistory       ImportHistory[]
+  scanRooms           ScanRoom[]
+  branch              Branch?               @relation(fields: [branchId], references: [id])
+  role                Role?                 @relation(fields: [roleId], references: [id])
+  permissionOverrides UserPermission[]
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  purpose   String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+}
+
+model ActivityLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+  user      SystemUser? @relation(fields: [userId], references: [id])
+}
+
+model Branch {
+  id         String       @id @default(cuid())
+  name       String
+  address    String?
+  latitude   Float?
+  longitude  Float?
+  archivedAt DateTime?
+  createdAt  DateTime     @default(now())
+  assets     Asset[]
+  employees  Employee[]
+  users      SystemUser[]
+}
+
+model Department {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  employees Employee[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  assets    Asset[]
+}
+
+model Employee {
+  id           String            @id @default(cuid())
+  name         String
+  email        String?           @unique
+  phone        String?
+  employeeId   String?           @unique
+  departmentId String?
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  branchId     String?
+  source       String            @default("manual")
+  position     String?
+  assignments  AssetAssignment[]
+  branch       Branch?           @relation(fields: [branchId], references: [id])
+  department   Department?       @relation(fields: [departmentId], references: [id])
+  movementLogs MovementLog[]
+}
+
+model Asset {
+  id                  String            @id @default(cuid())
+  name                String
+  serialNumber        String?
+  categoryId          String?
+  condition           AssetCondition    @default(usable)
+  ownership           OwnershipType     @default(company)
+  description         String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  nextMaintenanceDate DateTime?
+  warrantyExpiry      DateTime?
+  assetTag            String?
+  branchId            String?
+  computerName        String?
+  imeiNumber          String?
+  importId            String?
+  macAddress          String?
+  metadata            Json?
+  propertyTag         String?
+  lostAt              DateTime?
+  lostStolenNotes     String?
+  status              AssetStatus       @default(active)
+  notifiedDue         DateTime?
+  notifiedReminder    DateTime?
+  branch              Branch?           @relation(fields: [branchId], references: [id])
+  category            Category?         @relation(fields: [categoryId], references: [id])
+  importHistory       ImportHistory?    @relation(fields: [importId], references: [id])
+  assignments         AssetAssignment[]
+  movementLogs        MovementLog[]
+}
+
+model AssetAssignment {
+  id                String           @id @default(cuid())
+  assetId           String
+  employeeId        String
+  status            AssignmentStatus @default(active)
+  assignedAt        DateTime         @default(now())
+  returnedAt        DateTime?
+  notes             String?
+  returnNotes       String?
+  returnRequestedAt DateTime?
+  returnRequestedBy String?
+  asset             Asset            @relation(fields: [assetId], references: [id])
+  employee          Employee         @relation(fields: [employeeId], references: [id])
+}
+
+model MovementLog {
+  id         String       @id @default(cuid())
+  assetId    String
+  employeeId String?
+  type       MovementType
+  notes      String?
+  createdAt  DateTime     @default(now())
+  asset      Asset        @relation(fields: [assetId], references: [id])
+  employee   Employee?    @relation(fields: [employeeId], references: [id])
+}
+
+model ImportHistory {
+  id                 String       @id @default(cuid())
+  uploadedById       String
+  fileName           String
+  fileSize           Int
+  totalRows          Int          @default(0)
+  importedRows       Int          @default(0)
+  skippedRows        Int          @default(0)
+  failedRows         Int          @default(0)
+  duplicatesSkipped  Int          @default(0)
+  categoriesCreated  Int          @default(0)
+  editedBeforeImport Int          @default(0)
+  overwrittenRows    Int          @default(0)
+  strictMode         Boolean      @default(false)
+  status             ImportStatus @default(pending)
+  createdAt          DateTime     @default(now())
+  mappingUsed        Json?
+  assetsCreated      Int          @default(0)
+  assetsDuplicate    Int          @default(0)
+  assetsUpdated      Int          @default(0)
+  assignmentsCreated Int          @default(0)
+  employeesCreated   Int          @default(0)
+  employeesUpdated   Int          @default(0)
+  assets             Asset[]
+  uploadedBy         SystemUser   @relation(fields: [uploadedById], references: [id])
+  rows               ImportRow[]
+
+  @@index([uploadedById])
+}
+
+model ImportRow {
+  id           String        @id @default(cuid())
+  importId     String
+  rowIndex     Int
+  rawData      Json
+  mappedData   Json
+  outcome      RowOutcome?
+  assetId      String?
+  errorMessage String?
+  isDuplicate  Boolean       @default(false)
+  wasEdited    Boolean       @default(false)
+  conflictKey  String?
+  employeeHint String?
+  createdAt    DateTime      @default(now())
+  import       ImportHistory @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, rowIndex])
+}
+
+model ColumnMappingPreset {
+  id           String     @id @default(cuid())
+  name         String
+  categoryHint String?
+  mappings     Json
+  isShared     Boolean    @default(false)
+  createdById  String
+  createdAt    DateTime   @default(now())
+  createdBy    SystemUser @relation(fields: [createdById], references: [id])
+}
+
+model ScanRoom {
+  id         String         @id @default(cuid())
+  roomCode   String         @unique
+  ownerId    String
+  status     ScanRoomStatus @default(open)
+  maxDevices Int            @default(5)
+  createdAt  DateTime       @default(now())
+  expiresAt  DateTime
+  devices    ScanDevice[]
+  results    ScanResult[]
+  owner      SystemUser     @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
+  @@index([expiresAt])
+}
+
+model ScanDevice {
+  id          String           @id @default(cuid())
+  roomId      String
+  deviceToken String           @unique
+  deviceLabel String
+  status      ScanDeviceStatus @default(waiting)
+  connectedAt DateTime?
+  lastSeenAt  DateTime?
+  room        ScanRoom         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  results     ScanResult[]
+
+  @@index([roomId])
+}
+
+model ScanResult {
+  id           String           @id @default(cuid())
+  roomId       String
+  deviceId     String
+  parsedData   Json
+  rawLines     Json
+  status       ScanResultStatus @default(pending)
+  rejectReason String?
+  assetId      String?
+  scannedAt    DateTime         @default(now())
+  device       ScanDevice       @relation(fields: [deviceId], references: [id])
+  room         ScanRoom         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, status])
+  @@index([status, scannedAt])
+}
 
 enum AssetCondition {
   usable
@@ -29,114 +319,64 @@ enum MovementType {
   repair_send
   repair_return
   disposal
+  lost_report
+  stolen_report
+  recovery
+  return_requested
+  return_approved
+  return_rejected
 }
 
 enum AssignmentStatus {
   active
   returned
   transferred
+  pending_return
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-
-model SystemUser {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum AssetStatus {
+  active
+  lost
+  stolen
 }
 
-// ─── Organization ─────────────────────────────────────────────────────────────
-
-model Site {
-  id          String       @id @default(cuid())
-  name        String
-  address     String?
-  createdAt   DateTime     @default(now())
-  departments Department[]
-  employees   Employee[]
-  assets      Asset[]
+enum UserStatus {
+  active
+  inactive
+  suspended
 }
 
-model Department {
-  id        String     @id @default(cuid())
-  name      String
-  siteId    String
-  createdAt DateTime   @default(now())
-  site      Site       @relation(fields: [siteId], references: [id])
-  employees Employee[]
+enum ImportStatus {
+  pending
+  processing
+  completed
+  partial
+  failed
 }
 
-model Category {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  assets    Asset[]
+enum RowOutcome {
+  imported
+  skipped
+  failed
+  duplicate
+  overwritten
 }
 
-// ─── People ───────────────────────────────────────────────────────────────────
-
-model Employee {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?  @unique
-  phone        String?
-  employeeId   String?  @unique
-  siteId       String?
-  departmentId String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  site         Site?             @relation(fields: [siteId], references: [id])
-  department   Department?       @relation(fields: [departmentId], references: [id])
-  assignments  AssetAssignment[]
-  movementLogs MovementLog[]
+enum ScanRoomStatus {
+  open
+  closed
+  expired
 }
 
-// ─── Assets ───────────────────────────────────────────────────────────────────
-
-model Asset {
-  id           String         @id @default(cuid())
-  name         String
-  serialNumber String?        @unique
-  categoryId   String?
-  siteId       String?
-  condition    AssetCondition @default(usable)
-  ownership    OwnershipType  @default(company)
-  description  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  category     Category?         @relation(fields: [categoryId], references: [id])
-  site         Site?             @relation(fields: [siteId], references: [id])
-  assignments  AssetAssignment[]
-  movementLogs MovementLog[]
+enum ScanDeviceStatus {
+  waiting
+  connected
+  scanning
+  done
 }
 
-model AssetAssignment {
-  id         String           @id @default(cuid())
-  assetId    String
-  employeeId String
-  status     AssignmentStatus @default(active)
-  assignedAt DateTime         @default(now())
-  returnedAt DateTime?
-  notes      String?
-
-  asset    Asset    @relation(fields: [assetId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
-}
-
-model MovementLog {
-  id         String       @id @default(cuid())
-  assetId    String
-  employeeId String?
-  type       MovementType
-  notes      String?
-  createdAt  DateTime     @default(now())
-
-  asset    Asset     @relation(fields: [assetId], references: [id])
-  employee Employee? @relation(fields: [employeeId], references: [id])
+enum ScanResultStatus {
+  pending
+  accepted
+  rejected
 }

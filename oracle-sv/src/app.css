@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/* ─── Design tokens (DESIGN.md → OKLCH) ───────────────────────────────────── */
+/*
+  All hex values sourced from DESIGN.md and converted to OKLCH.
+  Neutrals are tinted toward blue-gray (hue ~285°) at chroma 0.005–0.008
+  per the impeccable color law. Pure whites/near-whites tinted warm (hue ~106°).
+*/
+
+:root {
+  /* Surfaces */
+  --canvas:         oklch(99.8% 0.002 106);   /* #ffffff */
+  --canvas-soft:    oklch(98.4% 0.002 106);   /* #fafafa */
+  --canvas-soft-2:  oklch(96.8% 0.002 106);   /* #f5f5f5 */
+
+  /* Text */
+  --ink:            oklch(14.5% 0.006 285);   /* #171717 */
+  --body:           oklch(37.3% 0.006 285);   /* #4d4d4d */
+  --mute:           oklch(58.7% 0.005 285);   /* #888888 */
+  --on-primary:     oklch(99.5% 0.002 285);   /* #ffffff (on dark bg) */
+
+  /* Borders */
+  --hairline:       oklch(93.1% 0.003 264);   /* #ebebeb */
+  --hairline-strong: oklch(66.7% 0.006 285);  /* #a1a1a1 */
+
+  /* Accent & semantic */
+  --link:           oklch(51.5% 0.22  264);   /* #0070f3 */
+  --link-deep:      oklch(46.0% 0.19  264);   /* #0761d1 */
+  --link-bg-soft:   oklch(88.0% 0.06  264);   /* #d3e5ff */
+  --error:          oklch(47.8% 0.26   28);   /* #ee0000 */
+  --error-soft:     oklch(93.0% 0.04   28);   /* #f7d4d6 */
+
+  /* Brand gradient stops */
+  --grad-develop-from:  oklch(53.0% 0.22 264);  /* #007cf0 */
+  --grad-develop-to:    oklch(82.0% 0.15 186);  /* #00dfd8 */
+  --grad-preview-from:  oklch(44.0% 0.22 302);  /* #7928ca */
+  --grad-preview-to:    oklch(57.0% 0.29 336);  /* #ff0080 */
+  --grad-ship-from:     oklch(59.0% 0.22  29);  /* #ff4d4d */
+  --grad-ship-to:       oklch(84.0% 0.17  89);  /* #f9cb28 */
+
+  /* Radius scale (from DESIGN.md rounded tokens) */
+  --r-none:    0px;
+  --r-xs:      4px;
+  --r-sm:      6px;
+  --r-md:      8px;
+  --r-lg:     12px;
+  --r-xl:     16px;
+  --r-pill-sm: 64px;
+  --r-pill:   100px;
+  --r-full:  9999px;
+
+  /* Spacing scale (from DESIGN.md — 4px base) */
+  --sp-xxs:  4px;
+  --sp-xs:   8px;
+  --sp-sm:  12px;
+  --sp-md:  16px;
+  --sp-lg:  24px;
+  --sp-xl:  32px;
+  --sp-2xl: 40px;
+  --sp-3xl: 48px;
+  --sp-4xl: 64px;
+  --sp-5xl: 96px;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Elevation shadows (DESIGN.md stacked-shadow system) */
+  --shadow-l1: 0 0 0 1px oklch(0% 0 0 / 8%);
+  --shadow-l2: 0 1px 1px oklch(0% 0 0 / 2%), 0 2px 2px oklch(0% 0 0 / 4%),
+               0 0 0 1px oklch(0% 0 0 / 8%);
+  --shadow-l3: 0 2px 2px oklch(0% 0 0 / 4%), 0 8px 8px -8px oklch(0% 0 0 / 4%),
+               0 0 0 1px oklch(0% 0 0 / 8%);
+  --shadow-l4: 0 2px 2px oklch(0% 0 0 / 4%), 0 8px 16px -4px oklch(0% 0 0 / 4%),
+               0 0 0 1px oklch(0% 0 0 / 8%);
+  --shadow-l5: 0 1px 1px oklch(0% 0 0 / 2%), 0 8px 16px -4px oklch(0% 0 0 / 4%),
+               0 24px 32px -8px oklch(0% 0 0 / 6%), 0 0 0 1px oklch(0% 0 0 / 8%);
+}
+
+/* ─── Dark mode tokens ─────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Surfaces */
+  --canvas:         oklch(14.5% 0.006 285);
+  --canvas-soft:    oklch(17.5% 0.006 285);
+  --canvas-soft-2:  oklch(21.0% 0.006 285);
+
+  /* Text */
+  --ink:            oklch(97.0% 0.002 106);
+  --body:           oklch(78.0% 0.005 285);
+  --mute:           oklch(55.0% 0.005 285);
+  --on-primary:     oklch(14.5% 0.006 285);
+
+  /* Borders */
+  --hairline:        oklch(25.0% 0.006 285);
+  --hairline-strong: oklch(45.0% 0.006 285);
+
+  /* Accent — keep link blue, soften the bg */
+  --link-bg-soft:   oklch(22.0% 0.06  264);
+  --error-soft:     oklch(22.0% 0.04   28);
+}
+
+/* ─── Tailwind v4 theme registration ──────────────────────────────────────── */
+@theme {
+  --color-canvas:        var(--canvas);
+  --color-canvas-soft:   var(--canvas-soft);
+  --color-canvas-soft-2: var(--canvas-soft-2);
+  --color-ink:           var(--ink);
+  --color-body:          var(--body);
+  --color-mute:          var(--mute);
+  --color-hairline:      var(--hairline);
+  --color-link:          var(--link);
+  --color-error:         var(--error);
+
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
+
+  --radius-sm:   var(--r-sm);
+  --radius-md:   var(--r-md);
+  --radius-lg:   var(--r-lg);
+  --radius-xl:   var(--r-xl);
+  --radius-pill: var(--r-pill);
+  --radius-full: var(--r-full);
+}
+
+/* ─── Base reset ───────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  /* Dark panel tint — the right brand panel bg bleeds as page bg */
+  background: oklch(13% 0.02 264);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Focus ring ───────────────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Custom checkboxes ────────────────────────────────────────────────────── */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid oklch(78% 0.006 285);
+  border-radius: 4px;
+  background: var(--canvas);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 100ms ease, border-color 100ms ease;
+  vertical-align: middle;
+}
+input[type="checkbox"]:checked {
+  background: oklch(56% 0.24 270);
+  border-color: oklch(56% 0.24 270);
+}
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:indeterminate {
+  background: oklch(56% 0.24 270);
+  border-color: oklch(56% 0.24 270);
+}
+input[type="checkbox"]:indeterminate::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  width: 8px;
+  height: 2px;
+  background: white;
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid oklch(56% 0.24 270);
+  outline-offset: 1px;
+}
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Responsive utilities ─────────────────────────────────────────────────── */
+
+/* Tables: horizontal scroll on narrow viewports */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* KPI / stat card grids: collapse to 2-col on tablet, 1-col on phone */
+@media (max-width: 767px) {
+  /* Generic 4-col stat grids */
+  .kpi-grid,
+  [class*="stats-grid"],
+  [class*="kpi-row"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Hide table columns marked as non-essential on mobile */
+  .col-hide-mobile {
+    display: none !important;
+  }
+
+  /* Page-level headings and action rows */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  /* Modals: full-width on mobile */
+  .modal-box,
+  [class*="modal-content"] {
+    width: calc(100vw - 32px) !important;
+    max-width: none !important;
+  }
+}

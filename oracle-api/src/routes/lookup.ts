@@ -6,16 +6,16 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", async (_req: AuthRequest, res: Response) => {
-  const [categories, sites, employees] = await Promise.all([
+  const [categories, branches, employees] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
-    prisma.site.findMany({ orderBy: { name: "asc" } }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } }),
     prisma.employee.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, employeeId: true, departmentId: true, siteId: true },
+      select: { id: true, name: true, employeeId: true, departmentId: true, branchId: true },
     }),
   ]);
-  res.json({ categories, sites, employees });
+  res.json({ categories, branches, employees });
 });
 
 export default router;

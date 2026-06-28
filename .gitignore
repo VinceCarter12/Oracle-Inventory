@@ -32,3 +32,39 @@ desktop.ini
 
 # Misc
 .vercel
+
+# AI tool configs
+.claude/
+.claudian/
+.agents/
+.windsurf/
+.fallow/
+.playwright-mcp/
+skills-lock.json
+
+# Editor configs
+.obsidian/
+.vscode/
+.svelte-kit/
+
+# Diagrams & exports
+Excalidraw/
+graphify-out/
+
+# Screenshots & demo files
+*.png
+*.jpg
+*.jpeg
+p1-ui-preview.html
+table-layout-fix-demo.html
+
+# Personal notes & temp files
+*.base
+Untitled.md
+2026-06-28.md
+_COMMUNITY_*.md
+
+# Test data
+test-import.csv
+test-import-2.csv
+test-opc.xlsx

@@ -10,7 +10,7 @@ router.get("/resignation/:employeeId", async (req: AuthRequest, res: Response) =
   const employee = await prisma.employee.findUnique({
     where: { id: req.params.employeeId },
     include: {
-      site: { select: { id: true, name: true } },
+      branch: { select: { id: true, name: true } },
       department: { select: { id: true, name: true } },
       assignments: {
         where: { status: "active" },

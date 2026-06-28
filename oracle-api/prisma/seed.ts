@@ -6,149 +6,104 @@ import bcrypt from "bcryptjs";
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
+// ─── Permission keys ──────────────────────────────────────────────────────────
+
+const PERMISSIONS = [
+  { id: "perm-view-inventory",      key: "view_inventory",      description: "View assets and inventory" },
+  { id: "perm-create-inventory",    key: "create_inventory",    description: "Add new assets" },
+  { id: "perm-edit-inventory",      key: "edit_inventory",      description: "Edit existing assets" },
+  { id: "perm-delete-inventory",    key: "delete_inventory",    description: "Delete assets" },
+  { id: "perm-manage-users",        key: "manage_users",        description: "Create, edit, disable system users" },
+  { id: "perm-assign-roles",        key: "assign_roles",        description: "Assign roles to users" },
+  { id: "perm-view-reports",        key: "view_reports",        description: "View reports and analytics" },
+  { id: "perm-manage-stock",        key: "manage_stock",        description: "Manage stock levels and transfers" },
+  { id: "perm-approve-transactions",key: "approve_transactions", description: "Approve asset transactions" },
+  { id: "perm-access-logs",         key: "access_logs",         description: "View activity logs" },
+  { id: "perm-manage-settings",     key: "manage_settings",     description: "Manage system settings" },
+  { id: "perm-import-inventory",    key: "import_inventory",    description: "Upload and import Excel/CSV inventory files" },
+  { id: "perm-force-import",        key: "force_import",        description: "Force overwrite duplicates during import" },
+  { id: "perm-scan-assets",        key: "scan_assets",         description: "Use OCR scanner to capture asset data" },
+] as const;
+
+// ─── Role → permission mappings ───────────────────────────────────────────────
+
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  "role-super-admin": [
+    "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
+    "perm-manage-users", "perm-assign-roles", "perm-view-reports", "perm-manage-stock",
+    "perm-approve-transactions", "perm-access-logs", "perm-manage-settings",
+    "perm-import-inventory", "perm-force-import", "perm-scan-assets",
+  ],
+  "role-admin": [
+    "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
+    "perm-view-reports", "perm-manage-stock", "perm-approve-transactions", "perm-access-logs",
+    "perm-import-inventory", "perm-scan-assets",
+  ],
+  "role-staff": [
+    "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-manage-stock",
+    "perm-scan-assets",
+  ],
+  "role-viewer": [
+    "perm-view-inventory", "perm-view-reports",
+  ],
+};
+
 async function main() {
   console.log("Seeding database...");
 
-  // ─── System User (Sir Jay) ─────────────────────────────────────────────────
-  const hash = await bcrypt.hash("Jay@Oracle2026", 10);
+  // ─── Permissions ───────────────────────────────────────────────────────────
+  for (const perm of PERMISSIONS) {
+    await prisma.permission.upsert({
+      where:  { id: perm.id },
+      update: { key: perm.key, description: perm.description },
+      create: { id: perm.id, key: perm.key, description: perm.description },
+    });
+  }
+  console.log(`✓ Permissions: ${PERMISSIONS.length} records`);
+
+  // ─── Roles ─────────────────────────────────────────────────────────────────
+  const roles = [
+    { id: "role-super-admin", name: "super_admin", description: "Full system access" },
+    { id: "role-admin",       name: "admin",       description: "Inventory and staff management" },
+    { id: "role-staff",       name: "staff",       description: "Inventory operations" },
+    { id: "role-viewer",      name: "viewer",      description: "Read-only access" },
+  ];
+
+  for (const role of roles) {
+    await prisma.role.upsert({
+      where:  { id: role.id },
+      update: { name: role.name, description: role.description },
+      create: { id: role.id, name: role.name, description: role.description },
+    });
+  }
+  console.log("✓ Roles: super_admin, admin, staff, viewer");
+
+  // ─── Role Permissions ──────────────────────────────────────────────────────
+  for (const [roleId, permIds] of Object.entries(ROLE_PERMISSIONS)) {
+    for (const permissionId of permIds) {
+      await prisma.rolePermission.upsert({
+        where:  { roleId_permissionId: { roleId, permissionId } },
+        update: {},
+        create: { roleId, permissionId },
+      });
+    }
+  }
+  console.log("✓ Role permissions assigned");
+
+  // ─── System Users ──────────────────────────────────────────────────────────
+  const hashPw = async (pw: string) => bcrypt.hash(pw, 10);
+
   await prisma.systemUser.upsert({
-    where: { email: "jay@oracle.com" },
-    update: {},
-    create: { name: "Sir Jay", email: "jay@oracle.com", password: hash },
+    where:  { email: "jay@oraclepetroleum.net" },
+    update: { roleId: "role-super-admin", status: "active" },
+    create: {
+      name: "Sir Jay", email: "jay@oraclepetroleum.net",
+      password: await hashPw("Jay@Oracle2026"),
+      roleId: "role-super-admin", status: "active",
+      position: "IT Director",
+    },
   });
-  console.log("✓ SystemUser: Sir Jay");
-
-  // ─── Sites ─────────────────────────────────────────────────────────────────
-  const manila = await prisma.site.upsert({
-    where: { id: "site-manila" },
-    update: {},
-    create: { id: "site-manila", name: "Manila HQ", address: "Makati, Metro Manila" },
-  });
-  const cebu = await prisma.site.upsert({
-    where: { id: "site-cebu" },
-    update: {},
-    create: { id: "site-cebu", name: "Cebu Office", address: "IT Park, Cebu City" },
-  });
-  const davao = await prisma.site.upsert({
-    where: { id: "site-davao" },
-    update: {},
-    create: { id: "site-davao", name: "Davao Hub", address: "Lanang, Davao City" },
-  });
-  console.log("✓ Sites: Manila HQ, Cebu Office, Davao Hub");
-
-  // ─── Departments ───────────────────────────────────────────────────────────
-  const deptIT = await prisma.department.upsert({
-    where: { id: "dept-it" },
-    update: {},
-    create: { id: "dept-it", name: "IT", siteId: manila.id },
-  });
-  const deptFinance = await prisma.department.upsert({
-    where: { id: "dept-finance" },
-    update: {},
-    create: { id: "dept-finance", name: "Finance", siteId: manila.id },
-  });
-  const deptOps = await prisma.department.upsert({
-    where: { id: "dept-ops" },
-    update: {},
-    create: { id: "dept-ops", name: "Operations", siteId: cebu.id },
-  });
-  console.log("✓ Departments: IT, Finance, Operations");
-
-  // ─── Categories ────────────────────────────────────────────────────────────
-  const catLaptop = await prisma.category.upsert({
-    where: { id: "cat-laptop" },
-    update: {},
-    create: { id: "cat-laptop", name: "Laptop" },
-  });
-  const catMonitor = await prisma.category.upsert({
-    where: { id: "cat-monitor" },
-    update: {},
-    create: { id: "cat-monitor", name: "Monitor" },
-  });
-  const catPeripherals = await prisma.category.upsert({
-    where: { id: "cat-peripherals" },
-    update: {},
-    create: { id: "cat-peripherals", name: "Peripherals" },
-  });
-  console.log("✓ Categories: Laptop, Monitor, Peripherals");
-
-  // ─── Employees ─────────────────────────────────────────────────────────────
-  const emp1 = await prisma.employee.upsert({
-    where: { employeeId: "EMP-001" },
-    update: {},
-    create: { employeeId: "EMP-001", name: "Maria Santos", email: "m.santos@oracle.com", siteId: manila.id, departmentId: deptIT.id },
-  });
-  const emp2 = await prisma.employee.upsert({
-    where: { employeeId: "EMP-002" },
-    update: {},
-    create: { employeeId: "EMP-002", name: "Jose Reyes", email: "j.reyes@oracle.com", siteId: manila.id, departmentId: deptFinance.id },
-  });
-  const emp3 = await prisma.employee.upsert({
-    where: { employeeId: "EMP-003" },
-    update: {},
-    create: { employeeId: "EMP-003", name: "Ana Cruz", email: "a.cruz@oracle.com", siteId: cebu.id, departmentId: deptOps.id },
-  });
-  await prisma.employee.upsert({
-    where: { employeeId: "EMP-004" },
-    update: {},
-    create: { employeeId: "EMP-004", name: "Carlo Bautista", email: "c.bautista@oracle.com", siteId: davao.id },
-  });
-  const emp5 = await prisma.employee.upsert({
-    where: { employeeId: "EMP-005" },
-    update: {},
-    create: { employeeId: "EMP-005", name: "Lisa Flores", email: "l.flores@oracle.com", siteId: manila.id, departmentId: deptIT.id },
-  });
-  console.log("✓ Employees: 5 records");
-
-  // ─── Assets ────────────────────────────────────────────────────────────────
-  const asset1 = await prisma.asset.upsert({
-    where: { serialNumber: "SN-LP-001" },
-    update: {},
-    create: { name: "Dell Latitude 5530", serialNumber: "SN-LP-001", categoryId: catLaptop.id, siteId: manila.id, condition: "usable", ownership: "company" },
-  });
-  const asset2 = await prisma.asset.upsert({
-    where: { serialNumber: "SN-LP-002" },
-    update: {},
-    create: { name: "MacBook Pro 14\"", serialNumber: "SN-LP-002", categoryId: catLaptop.id, siteId: manila.id, condition: "usable", ownership: "company" },
-  });
-  const asset3 = await prisma.asset.upsert({
-    where: { serialNumber: "SN-MON-001" },
-    update: {},
-    create: { name: "LG 27\" 4K Monitor", serialNumber: "SN-MON-001", categoryId: catMonitor.id, siteId: cebu.id, condition: "usable", ownership: "company" },
-  });
-  const asset4 = await prisma.asset.upsert({
-    where: { serialNumber: "SN-LP-003" },
-    update: {},
-    create: { name: "Lenovo ThinkPad X1", serialNumber: "SN-LP-003", categoryId: catLaptop.id, siteId: davao.id, condition: "for_repair", ownership: "company", description: "Keyboard issue — sent to service center" },
-  });
-  const asset5 = await prisma.asset.upsert({
-    where: { serialNumber: "SN-PER-001" },
-    update: {},
-    create: { name: "Logitech MX Keys Combo", serialNumber: "SN-PER-001", categoryId: catPeripherals.id, siteId: manila.id, condition: "usable", ownership: "company" },
-  });
-  console.log("✓ Assets: 5 records");
-
-  // ─── Assignments ───────────────────────────────────────────────────────────
-  await prisma.assetAssignment.createMany({
-    skipDuplicates: true,
-    data: [
-      { assetId: asset1.id, employeeId: emp1.id, status: "active", notes: "Primary workstation" },
-      { assetId: asset2.id, employeeId: emp5.id, status: "active", notes: "Dev machine" },
-      { assetId: asset3.id, employeeId: emp3.id, status: "active" },
-    ],
-  });
-  console.log("✓ Assignments: 3 active");
-
-  // ─── Movement Logs ─────────────────────────────────────────────────────────
-  await prisma.movementLog.createMany({
-    data: [
-      { assetId: asset1.id, employeeId: emp1.id, type: "assignment", notes: "Initial assignment" },
-      { assetId: asset2.id, employeeId: emp5.id, type: "assignment", notes: "Initial assignment" },
-      { assetId: asset3.id, employeeId: emp3.id, type: "assignment", notes: "Initial assignment" },
-      { assetId: asset4.id, type: "repair_send", notes: "Sent to service center for keyboard repair" },
-    ],
-  });
-  console.log("✓ Movement logs: 4 entries");
+  console.log("✓ SystemUsers: Sir Jay (super_admin)");
 
   console.log("\nSeed complete.");
 }
