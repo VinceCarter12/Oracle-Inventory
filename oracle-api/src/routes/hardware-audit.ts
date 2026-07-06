@@ -2,9 +2,11 @@ import { Router, Response } from "express";
 import multer from "multer";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 import { prisma } from "../lib/prisma";
+import { Prisma } from "../generated/prisma/client";
 import { logActivity } from "../lib/activity";
 import { parseBelarc } from "../lib/belarc/parseBelarc";
-import { NotABelarcReportError } from "../lib/belarc/types";
+import { compareSpecs } from "../lib/belarc/compare";
+import { NotABelarcReportError, type ParsedSpecs } from "../lib/belarc/types";
 
 const router = Router();
 
@@ -62,12 +64,25 @@ router.post(
       throw e;
     }
 
+    const assetId = req.body.assetId as string | undefined;
+
     if (req.body.dryRun === "true") {
-      res.json({ dryRun: true, parsedSpecs });
+      // Preview parse — and preview the comparison too when the asset already
+      // has a baseline, so the uploader sees discrepancies before submitting
+      let comparison = null;
+      if (assetId) {
+        const baseline = await prisma.hardwareScan.findFirst({
+          where: { assetId, isBaseline: true },
+          select: { parsedSpecs: true },
+        }).catch(() => null);
+        if (baseline) {
+          comparison = compareSpecs(baseline.parsedSpecs as unknown as ParsedSpecs, parsedSpecs);
+        }
+      }
+      res.json({ dryRun: true, parsedSpecs, comparison });
       return;
     }
 
-    const assetId = req.body.assetId as string | undefined;
     if (!assetId) {
       res.status(400).json({ error: "assetId is required." });
       return;
@@ -80,7 +95,14 @@ router.post(
         return;
       }
 
-      // Comparison vs. baseline is Phase C — stored scans carry parsed specs only
+      const baseline = await prisma.hardwareScan.findFirst({
+        where: { assetId, isBaseline: true },
+        select: { id: true, parsedSpecs: true },
+      });
+      const comparison = baseline
+        ? compareSpecs(baseline.parsedSpecs as unknown as ParsedSpecs, parsedSpecs)
+        : null;
+
       const scan = await prisma.hardwareScan.create({
         data: {
           assetId,
@@ -88,6 +110,8 @@ router.post(
           fileName: req.file.originalname,
           rawHtml: html,
           parsedSpecs: JSON.parse(JSON.stringify(parsedSpecs)),
+          comparisonResult: comparison ? JSON.parse(JSON.stringify(comparison)) : undefined,
+          overallStatus: comparison?.overallStatus ?? null,
         },
         select: scanSummarySelect,
       });
@@ -102,6 +126,7 @@ router.post(
           fileName: req.file.originalname,
           computerName: parsedSpecs.meta.computerName ?? null,
           missingSections: parsedSpecs.meta.missingSections,
+          overallStatus: comparison?.overallStatus ?? null,
         },
       });
 
@@ -235,12 +260,31 @@ router.put(
           where: { assetId: scan.assetId, isBaseline: true },
           data: { isBaseline: false },
         });
-        return tx.hardwareScan.update({
+        const accepted = await tx.hardwareScan.update({
           where: { id: scan.id },
           // The baseline is the reference point — nothing to compare it against
-          data: { isBaseline: true, comparisonResult: undefined, overallStatus: null, status: "reviewed", reviewedById: req.user!.id, reviewedAt: new Date() },
-          select: scanSummarySelect,
+          data: { isBaseline: true, comparisonResult: Prisma.DbNull, overallStatus: null, status: "reviewed", reviewedById: req.user!.id, reviewedAt: new Date() },
+          select: { ...scanSummarySelect, parsedSpecs: true },
         });
+
+        // Pending scans were compared against the old baseline — recompute
+        // against the new one so the queue reflects reality
+        const pending = await tx.hardwareScan.findMany({
+          where: { assetId: scan.assetId, isBaseline: false, status: "pending" },
+          select: { id: true, parsedSpecs: true },
+        });
+        const baselineSpecs = accepted.parsedSpecs as unknown as ParsedSpecs;
+        for (const p of pending) {
+          const comparison = compareSpecs(baselineSpecs, p.parsedSpecs as unknown as ParsedSpecs);
+          await tx.hardwareScan.update({
+            where: { id: p.id },
+            data: {
+              comparisonResult: JSON.parse(JSON.stringify(comparison)),
+              overallStatus: comparison.overallStatus,
+            },
+          });
+        }
+        return accepted;
       });
 
       await logActivity({

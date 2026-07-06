@@ -108,6 +108,6 @@ tags: [dashboard]
 
 ## Recent Sessions
 
-- [[Journal/2026-07-06]] — Hardware Audit Phases A+B: Belarc parser (20 tests) · HardwareScan model + upload/baseline API · upload page + Hardware section on asset detail · fixed stale super_admin permissions in dev DB
+- [[Journal/2026-07-06]] — Hardware Audit Phases A–C: Belarc parser · upload/baseline flow · comparison engine (tier diff, live-tested tamper detection) · fixed stale super_admin permissions in dev DB
 - [[Journal/2026-07-03]] — Dashboard complete · `/reports` deleted per ADR · Export CSV + DateRangePicker added to dashboard header
 - [[Journal/2026-06-28]] — Catch-up: full history reconstructed from git log

@@ -505,10 +505,15 @@ Overall status = worst status across all fields.
 - Permissions reused: upload/view = `view_inventory`, accept baseline = `edit_inventory` (no new permission keys seeded)
 - Sidebar "Hardware Audit" nav item deferred to Phase D (queue page is its landing route)
 
-### Phase C — Comparison Engine
-- [ ] Field-by-field diff: new scan `parsedSpecs` vs baseline scan `parsedSpecs`
-- [ ] Apply volatility tiers — hard → 🔴, soft → 🟡, skip → ignored
-- [ ] Store `comparisonResult` JSON + `overallStatus` on the scan
+### Phase C — Comparison Engine ✅ COMPLETE 2026-07-06
+- [x] Field-by-field diff: new scan `parsedSpecs` vs baseline scan `parsedSpecs` — `oracle-api/src/lib/belarc/compare.ts` (`compareSpecs`), keyed on the stable field keys from Phase A
+- [x] Apply volatility tiers — hard → 🔴 mismatch, soft → 🟡 warning, skip → ignored
+- [x] Store `comparisonResult` JSON + `overallStatus` on the scan at upload time
+- [x] Also: `missing` (in baseline, absent from scan) and `added` (in scan, not in baseline) statuses — both escalate by tier (missing/added *hard* component = mismatch, e.g. removed RAM stick or unrecognized drive)
+- [x] Dry-run upload now returns the comparison too (pass `assetId`) — uploader sees the diff before submitting; upload page renders it (summary line + flagged-field list, hard fields dotted red)
+- [x] Accepting a new baseline **recomputes all pending scans** of that asset against it (in the same transaction) so the queue never shows stale comparisons
+- [x] 12 unit tests (`compare.test.ts`): self-compare = clean match, hard/soft mutations, removed RAM stick, added drive, skip-churn ignored, mixed severity, summary math
+- Verified live: identical file → match (112 compared fields); tampered file (drive serial + OS version) → mismatch with exactly the 2 expected flags; baseline swap → pending scan recomputed to mismatch
 
 ### Phase D — Admin Review Queue
 - [ ] `GET /api/hardware-audit/scans` — list with filters

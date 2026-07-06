@@ -20,7 +20,18 @@
     sections: Record<string, { key: string; name: string; fields: SpecField[] }>;
     meta: { computerName?: string; profileDate?: string; advisorVersion?: string; missingSections: string[] };
   }
-  interface ScanSummary { id: string; assetId: string; isBaseline: boolean; }
+  interface ScanSummary { id: string; assetId: string; isBaseline: boolean; overallStatus: 'match' | 'warning' | 'mismatch' | null; }
+
+  interface FieldComparison {
+    key: string; label: string; section: string; tier: 'hard' | 'soft';
+    baseline: string | null; current: string | null;
+    status: 'match' | 'warning' | 'mismatch' | 'missing' | 'added';
+  }
+  interface ComparisonResult {
+    overallStatus: 'match' | 'warning' | 'mismatch';
+    summary: { match: number; warning: number; mismatch: number; missing: number; added: number };
+    fields: FieldComparison[];
+  }
 
   // ── State ─────────────────────────────────────────────────────────────────
   let loading   = $state(true);
@@ -35,6 +46,11 @@
   let parsing    = $state(false);
   let parseErr   = $state('');
   let preview    = $state<ParsedSpecs | null>(null);
+  let comparison = $state<ComparisonResult | null>(null);
+
+  const issues = $derived(
+    (comparison?.fields ?? []).filter((f) => f.status !== 'match')
+  );
 
   let submitting = $state(false);
   let submitErr  = $state('');
@@ -117,6 +133,7 @@
   async function handleFile(f: File) {
     parseErr = '';
     preview = null;
+    comparison = null;
     submitted = null;
     if (!/\.html?$/i.test(f.name)) {
       parseErr = 'Only .html / .htm Belarc exports are accepted.';
@@ -128,6 +145,8 @@
       const formData = new FormData();
       formData.append('file', f);
       formData.append('dryRun', 'true');
+      // With the asset known, the dry run also previews the diff vs. baseline
+      if (selected) formData.append('assetId', selected.id);
       const res = await fetch('/api/hardware-audit/scan', {
         method: 'POST',
         headers: { Authorization: `Bearer ${authStore.token}` },
@@ -136,6 +155,7 @@
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       preview = body.parsedSpecs as ParsedSpecs;
+      comparison = (body.comparison ?? null) as ComparisonResult | null;
     } catch (e) {
       parseErr = (e as Error).message;
       file = null;
@@ -288,9 +308,49 @@
           </div>
         {/if}
 
+        {#if comparison}
+          <div class="cmp" class:cmp-mismatch={comparison.overallStatus === 'mismatch'} class:cmp-warning={comparison.overallStatus === 'warning'}>
+            <div class="cmp-head">
+              {#if comparison.overallStatus === 'match'}
+                🟢 Matches baseline — all {comparison.summary.match} compared fields identical
+              {:else if comparison.overallStatus === 'warning'}
+                🟡 {issues.length} difference{issues.length === 1 ? '' : 's'} vs baseline — warnings only
+              {:else}
+                🔴 Mismatch vs baseline — {comparison.summary.mismatch + comparison.summary.missing + comparison.summary.added} flagged field{comparison.summary.mismatch + comparison.summary.missing + comparison.summary.added === 1 ? '' : 's'}
+              {/if}
+            </div>
+            {#if issues.length > 0}
+              <div class="cmp-list">
+                {#each issues.slice(0, 12) as f (f.key)}
+                  <div class="cmp-row">
+                    <span class="cmp-dot" class:dot-hard={f.tier === 'hard'}></span>
+                    <span class="cmp-label">{f.label || f.key}</span>
+                    <span class="cmp-vals">
+                      {#if f.status === 'missing'}
+                        was <strong>{f.baseline}</strong> — not found in this scan
+                      {:else if f.status === 'added'}
+                        new: <strong>{f.current}</strong> — not in baseline
+                      {:else}
+                        <strong>{f.baseline}</strong> → <strong>{f.current}</strong>
+                      {/if}
+                    </span>
+                  </div>
+                {/each}
+                {#if issues.length > 12}
+                  <div class="cmp-more">…and {issues.length - 12} more</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else if baseline}
+          <div class="warn-box">Comparison against baseline will run on submit.</div>
+        {/if}
+
         <div class="actions">
           {#if submitted}
-            <span class="ok">✓ Scan submitted.</span>
+            <span class="ok">
+              ✓ Scan submitted{submitted.overallStatus === 'mismatch' ? ' — flagged for review (mismatch)' : submitted.overallStatus === 'warning' ? ' — warnings noted' : submitted.overallStatus === 'match' ? ' — matches baseline' : ''}.
+            </span>
             {#if !baseline && can('edit_inventory')}
               <button class="btn-primary" disabled={accepting} onclick={acceptAsBaseline}>
                 {accepting ? 'Accepting…' : 'Accept as Baseline'}
@@ -382,6 +442,21 @@
     border: 1px solid var(--hairline-strong); border-radius: var(--r-sm, 6px);
     background: var(--canvas-soft); color: var(--body);
   }
+
+  .cmp {
+    margin-top: 14px; padding: 12px 14px; font-size: 13px;
+    border: 1px solid var(--hairline-strong); border-radius: var(--r-sm, 6px);
+    background: var(--canvas-soft);
+  }
+  .cmp-mismatch { border-color: var(--error); }
+  .cmp-head { font-weight: 600; color: var(--ink); }
+  .cmp-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .cmp-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--body); }
+  .cmp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline-strong); flex-shrink: 0; align-self: center; }
+  .cmp-dot.dot-hard { background: var(--error); }
+  .cmp-label { font-weight: 500; color: var(--ink); white-space: nowrap; }
+  .cmp-vals { word-break: break-word; }
+  .cmp-more { font-size: 12px; color: var(--mute); }
 
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   .btn-primary, .btn-outline, .btn-ghost {

@@ -297,7 +297,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 > **2026-07-03**: No manual baseline entry — first accepted scan IS the baseline. Belarc HTML structure verified against a real export (`.reportSection` divs).
 - [x] Phase A: Server-side Belarc HTML parser (`parseBelarc` — 21 recorded sections, volatility tiers) ✅ 2026-07-06 — `oracle-api/src/lib/belarc/`, 20 tests against real export fixture
 - [x] Phase B: `HardwareScan` model + upload page + accept-as-baseline flow + Hardware section on asset detail ✅ 2026-07-06 — `/api/hardware-audit/*` (6 endpoints), `/hardware-audit/upload`, smoke-tested end-to-end
-- [ ] Phase C: Comparison engine — new scan vs baseline scan (parsed JSON diff)
+- [x] Phase C: Comparison engine — new scan vs baseline scan (parsed JSON diff) ✅ 2026-07-06 — `compareSpecs` w/ tier severity, missing/added detection, pending-scan recompute on baseline swap, 12 tests
 - [ ] Phase D: Admin review queue (`/hardware-audit`) + comparison detail (`/hardware-audit/[scanId]`)
 - [ ] Phase E *(deferred)*: Exit check block on employee offboarding
 
@@ -330,7 +330,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **Scan system** | 🔶 Backend done — UI needs wiring |
 | **Reports** | ✅ Merged into Dashboard — `/reports` route deleted per ADR; backend endpoints feed dashboard + CSV export |
 | **Activity log** | 🔶 Backend done — UI needs data wiring |
-| **Hardware audit** | 🔶 Phases A+B done (parser, HardwareScan model, upload page, baseline flow) — C (comparison) + D (review queue) remain |
+| **Hardware audit** | 🔶 Phases A–C done (parser, upload/baseline flow, comparison engine) — D (admin review queue + detail page) remains |
 | **Deployment** | 🔲 Not started — SvelteKit adapter not chosen |
 
 ---

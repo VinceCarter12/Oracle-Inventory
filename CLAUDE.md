@@ -90,8 +90,8 @@ Then write a journal entry summarizing what was built, and update Planning/PLAN.
 > Update this section manually or ask Claude to update it after each session.
 
 **Last worked on**: 2026-07-06
-**Status**: Hardware Audit Phases A+B complete — Belarc parser, HardwareScan model, upload/baseline API, `/hardware-audit/upload` page, Hardware section on asset detail. Smoke-tested end-to-end.
-**Next priority**: Hardware Audit Phase C (comparison engine: diff scan vs baseline parsedSpecs using volatility tiers, store comparisonResult + overallStatus)
+**Status**: Hardware Audit Phases A–C complete — Belarc parser, upload/baseline flow, comparison engine (tier-based diff, stored at upload, recompute on baseline swap). All smoke-tested live.
+**Next priority**: Hardware Audit Phase D (admin review queue: review endpoint, `/hardware-audit` queue page, `/hardware-audit/[scanId]` comparison detail, sidebar badge)
 
 ---
 
