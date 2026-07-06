@@ -493,12 +493,17 @@ Overall status = worst status across all fields.
 > - Virus Protection renders as a **table** in real exports, not text lines
 > - Serials/drives/RAM slots/licenses live in `<table>` cells — parser extracts cell-by-cell
 
-### Phase B — Scan Upload + Baseline
-- [ ] Add `HardwareScan` model to Prisma schema (with `isBaseline`, `rawHtml`)
-- [ ] `POST /api/hardware-audit/scan` — multipart HTML upload → parse → store; compare if baseline exists
-- [ ] `PUT /api/hardware-audit/scans/:id/baseline` — accept scan as baseline (one per asset)
-- [ ] `/hardware-audit/upload` page — 3-step flow (select asset, upload, preview)
-- [ ] "Hardware" tab on `/assets/[id]` — shows baseline scan specs + scan history (read-only, no manual form)
+### Phase B — Scan Upload + Baseline ✅ COMPLETE 2026-07-06
+- [x] Add `HardwareScan` model to Prisma schema (with `isBaseline`, `rawHtml`) + `HwComparisonStatus` / `HardwareScanStatus` enums — pushed to Neon
+- [x] `POST /api/hardware-audit/scan` — multipart HTML upload → parse → store; `dryRun=true` returns preview only (comparison itself is Phase C)
+- [x] `PUT /api/hardware-audit/scans/:id/baseline` — accept scan as baseline (one per asset, transactional swap; marks scan reviewed)
+- [x] Also built: `GET /scans?assetId=`, `GET /scans/:id`, `GET /scans/:id/raw` (CSP-sandboxed evidence view), `GET /baseline/:assetId`
+- [x] `/hardware-audit/upload` page — 3-step flow (select asset, upload w/ dry-run preview, submit); supports `?asset=` preselect; offers "Accept as Baseline" after first submit
+- [x] Hardware **section** on `/assets/[id]` — baseline headline specs, scan history with accept-as-baseline, sandboxed original-report viewer modal
+  - *Deviation from wireframe*: rendered as a section in the right panel, not a tab — the asset detail page has no tab system; revisit if tabs are added
+  - *Deviation*: shown for all asset categories, not just IT equipment — category names are free-form, no reliable "IT" filter yet
+- Permissions reused: upload/view = `view_inventory`, accept baseline = `edit_inventory` (no new permission keys seeded)
+- Sidebar "Hardware Audit" nav item deferred to Phase D (queue page is its landing route)
 
 ### Phase C — Comparison Engine
 - [ ] Field-by-field diff: new scan `parsedSpecs` vs baseline scan `parsedSpecs`

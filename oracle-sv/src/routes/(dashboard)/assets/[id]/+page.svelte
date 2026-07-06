@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
+  import { authStore } from '$lib/stores/auth.svelte';
   import { can } from '$lib/utils/permissions';
 
   // ── API types ─────────────────────────────────────────────────────────────
@@ -58,6 +59,26 @@
   let showDel  = $state(false);
   let deleting = $state(false);
 
+  // Hardware audit (Belarc scans)
+  interface HwSpecField { key: string; label: string; value: string; tier: string; }
+  interface HwScan {
+    id: string; fileName: string; isBaseline: boolean;
+    overallStatus: 'match' | 'warning' | 'mismatch' | null;
+    status: 'pending' | 'reviewed' | 'flagged' | 'archived';
+    createdAt: string;
+    submittedBy: { id: string; name: string } | null;
+  }
+  interface HwBaseline extends HwScan {
+    parsedSpecs: {
+      sections: Record<string, { key: string; name: string; fields: HwSpecField[] }>;
+      meta: { computerName?: string; profileDate?: string };
+    } | null;
+  }
+  let hwBaseline  = $state<HwBaseline | null>(null);
+  let hwScans     = $state<HwScan[]>([]);
+  let hwAccepting = $state('');
+  let hwErr       = $state('');
+
   const assetId      = $derived($page.params.id);
   const assignee     = $derived(asset?.assignments?.[0]?.employee?.name ?? '—');
   const assigneeDept = $derived(asset?.assignments?.[0]?.employee?.department?.name ?? '—');
@@ -110,7 +131,70 @@
     } finally {
       loading = false;
     }
+    // Hardware audit data loads independently — a failure here never blanks the page
+    void loadHardware();
   });
+
+  async function loadHardware() {
+    const id = $page.params.id;
+    hwBaseline = await api.get<HwBaseline | null>(`/api/hardware-audit/baseline/${id}`).catch(() => null);
+    hwScans    = await api.get<HwScan[]>(`/api/hardware-audit/scans?assetId=${id}`).catch(() => []);
+  }
+
+  const hwHeadline = $derived.by((): { label: string; value: string }[] => {
+    const specs = hwBaseline?.parsedSpecs;
+    if (!specs) return [];
+    const rows: { label: string; value: string }[] = [];
+    const get = (section: string, key: string) =>
+      specs.sections[section]?.fields.find((f) => f.key === key)?.value;
+    const os = get('operatingSystem', 'operatingSystem.description');
+    if (os) rows.push({ label: 'OS', value: os });
+    const model = get('systemModel', 'systemModel.model');
+    if (model) rows.push({ label: 'Model', value: model });
+    const cpu = get('processor', 'processor.name');
+    if (cpu) rows.push({ label: 'CPU', value: cpu });
+    const ram = get('memory', 'memory.total');
+    if (ram) rows.push({ label: 'RAM', value: ram });
+    const gpus = specs.sections.display?.fields.filter((f) => f.key.startsWith('display.adapter')) ?? [];
+    if (gpus.length) rows.push({ label: 'GPU', value: gpus.map((g) => g.value).join(' · ') });
+    const drives = specs.sections.localStorage?.fields.filter((f) => f.key.endsWith('.model')) ?? [];
+    if (drives.length) rows.push({ label: 'Drives', value: drives.map((d) => d.value).join(' · ') });
+    const board = get('mainBoard', 'mainBoard.board');
+    if (board) rows.push({ label: 'Motherboard', value: board });
+    return rows;
+  });
+
+  async function hwAcceptBaseline(scanId: string) {
+    hwAccepting = scanId;
+    hwErr = '';
+    try {
+      await api.put(`/api/hardware-audit/scans/${scanId}/baseline`, {});
+      await loadHardware();
+    } catch (e) {
+      hwErr = (e as Error).message;
+    } finally {
+      hwAccepting = '';
+    }
+  }
+
+  // Uploaded HTML is untrusted — render it only inside a fully sandboxed iframe
+  // (no scripts, no same-origin), never as a top-level document in our origin.
+  let hwRawUrl = $state('');
+  async function hwViewRaw(scanId: string) {
+    try {
+      const res = await fetch(`/api/hardware-audit/scans/${scanId}/raw`, {
+        headers: { Authorization: `Bearer ${authStore.token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      hwRawUrl = URL.createObjectURL(await res.blob());
+    } catch (e) {
+      hwErr = (e as Error).message;
+    }
+  }
+  function hwCloseRaw() {
+    if (hwRawUrl) URL.revokeObjectURL(hwRawUrl);
+    hwRawUrl = '';
+  }
 
   // ── Edit ──────────────────────────────────────────────────────────────────
   function openEdit() {
@@ -459,6 +543,67 @@
           </div>
         </div>
 
+        <!-- Hardware section (Belarc audit) -->
+        <div class="rp-section">
+          <div class="section-head hw-head">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+            <span class="section-title">Hardware</span>
+            <button class="hw-upload-btn" onclick={() => goto(`/hardware-audit/upload?asset=${asset!.id}`)}>Upload New Scan</button>
+          </div>
+
+          {#if hwErr}<div class="hw-err">{hwErr}</div>{/if}
+
+          {#if hwBaseline}
+            <div class="hw-baseline-meta">
+              Baseline accepted {fmtDate(hwBaseline.createdAt)}{hwBaseline.submittedBy ? ` · uploaded by ${hwBaseline.submittedBy.name}` : ''}
+              <button class="hw-link" onclick={() => hwViewRaw(hwBaseline!.id)}>View original Belarc report</button>
+            </div>
+            <div class="field-grid">
+              {#each hwHeadline as row}
+                <div class="field" class:field-wide={row.value.length > 60}>
+                  <span class="field-label">{row.label}</span>
+                  <span class="field-value">{row.value}</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="act-empty">No baseline hardware specs yet. Upload a Belarc scan and accept it as the baseline.</div>
+          {/if}
+
+          {#if hwScans.length > 0}
+            <div class="hw-history-title">Scan History</div>
+            <div class="hw-history">
+              {#each hwScans as scan (scan.id)}
+                <div class="hw-row">
+                  <div class="hw-row-main">
+                    <span class="hw-row-file">{scan.fileName}</span>
+                    <span class="hw-row-meta">{fmtDate(scan.createdAt)}{scan.submittedBy ? ` · ${scan.submittedBy.name}` : ''}</span>
+                  </div>
+                  <div class="hw-row-side">
+                    {#if scan.isBaseline}
+                      <span class="badge badge-blue">Baseline</span>
+                    {:else if scan.overallStatus === 'mismatch'}
+                      <span class="badge badge-red">Mismatch</span>
+                    {:else if scan.overallStatus === 'warning'}
+                      <span class="badge badge-orange">Warning</span>
+                    {:else if scan.overallStatus === 'match'}
+                      <span class="badge badge-green">Match</span>
+                    {:else}
+                      <span class="badge badge-muted">{scan.status}</span>
+                    {/if}
+                    {#if !scan.isBaseline && can('edit_inventory')}
+                      <button class="hw-link" disabled={hwAccepting === scan.id} onclick={() => hwAcceptBaseline(scan.id)}>
+                        {hwAccepting === scan.id ? 'Accepting…' : hwBaseline ? 'Make baseline' : 'Accept as baseline'}
+                      </button>
+                    {/if}
+                    <button class="hw-link" onclick={() => hwViewRaw(scan.id)}>View report</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
       </div><!-- /right-panel -->
     </div><!-- /main-card -->
 
@@ -672,6 +817,22 @@
             {deleting ? 'Deleting…' : 'Delete asset'}
           </button>
         </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ── Belarc raw report viewer (sandboxed) ────────────────────────────── -->
+  {#if hwRawUrl}
+    <div class="modal-overlay" onclick={hwCloseRaw} role="presentation">
+      <div class="modal hw-raw-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Original Belarc report">
+        <div class="modal-head">
+          <span class="modal-title">Original Belarc Report</span>
+          <button class="modal-close" onclick={hwCloseRaw} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <!-- sandbox="" = no scripts, no same-origin — uploaded HTML stays inert -->
+        <iframe class="hw-raw-frame" sandbox="" src={hwRawUrl} title="Belarc report"></iframe>
       </div>
     </div>
   {/if}
@@ -1017,6 +1178,34 @@
   .act-desc { font-size: 13px; font-weight: 600; color: var(--ink); font-family: var(--font-sans); }
   .act-date { font-size: 11.5px; color: var(--mute); font-family: var(--font-sans); }
   .act-empty { font-size: 13px; color: var(--mute); padding: 8px 0; }
+
+  /* ── Hardware section ─────────────────────────────────────────────────── */
+  .hw-head { justify-content: flex-start; }
+  .hw-upload-btn {
+    margin-left: auto; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+    padding: 4px 10px; border-radius: var(--r-sm, 6px);
+    background: var(--canvas); color: var(--ink); border: 1px solid var(--hairline-strong);
+  }
+  .hw-upload-btn:hover { background: var(--canvas-soft); }
+  .hw-err { font-size: 12px; color: var(--error); margin-bottom: 8px; }
+  .hw-baseline-meta { font-size: 12px; color: var(--mute); margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .hw-link {
+    font: inherit; font-size: 12px; color: var(--link); background: none; border: none;
+    cursor: pointer; padding: 0; text-decoration: underline;
+  }
+  .hw-link:disabled { color: var(--mute); cursor: default; }
+  .hw-history-title { font-size: 12px; font-weight: 600; color: var(--body); margin: 14px 0 6px; }
+  .hw-history { display: flex; flex-direction: column; }
+  .hw-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 0; border-top: 1px solid var(--hairline);
+  }
+  .hw-row-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .hw-row-file { font-size: 12.5px; color: var(--ink); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hw-row-meta { font-size: 12px; color: var(--mute); }
+  .hw-row-side { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .hw-raw-modal { width: min(920px, 94vw); height: min(80vh, 800px); display: flex; flex-direction: column; }
+  .hw-raw-frame { flex: 1; width: 100%; border: none; border-radius: 0 0 var(--r-md, 8px) var(--r-md, 8px); background: #fff; }
 
   /* ── Badges ──────────────────────────────────────────────────────────────── */
   .badge {

@@ -90,8 +90,8 @@ Then write a journal entry summarizing what was built, and update Planning/PLAN.
 > Update this section manually or ask Claude to update it after each session.
 
 **Last worked on**: 2026-07-06
-**Status**: Hardware Audit Phase A complete — Belarc parser (`oracle-api/src/lib/belarc/`) built and tested against real export.
-**Next priority**: Hardware Audit Phase B (HardwareScan Prisma model, scan upload endpoint, accept-as-baseline, upload page, Hardware tab on asset detail)
+**Status**: Hardware Audit Phases A+B complete — Belarc parser, HardwareScan model, upload/baseline API, `/hardware-audit/upload` page, Hardware section on asset detail. Smoke-tested end-to-end.
+**Next priority**: Hardware Audit Phase C (comparison engine: diff scan vs baseline parsedSpecs using volatility tiers, store comparisonResult + overallStatus)
 
 ---
 

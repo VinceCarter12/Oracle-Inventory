@@ -17,6 +17,7 @@ import departmentsRoutes from "./routes/departments";
 import importRoutes from "./routes/import";
 import maintenanceRoutes from "./routes/maintenance";
 import scanRoutes from "./routes/scan";
+import hardwareAuditRoutes from "./routes/hardware-audit";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -50,6 +51,7 @@ app.use("/api/departments", departmentsRoutes);
 app.use("/api/import", importRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/scan", scanRoutes);
+app.use("/api/hardware-audit", hardwareAuditRoutes);
 
 app.listen(PORT, () => {
   console.log(`Oracle API running on port ${PORT}`);

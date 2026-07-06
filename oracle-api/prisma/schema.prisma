@@ -60,6 +60,8 @@ model SystemUser {
   mappingPresets      ColumnMappingPreset[]
   importHistory       ImportHistory[]
   scanRooms           ScanRoom[]
+  submittedHwScans    HardwareScan[]        @relation("HardwareScanSubmitter")
+  reviewedHwScans     HardwareScan[]        @relation("HardwareScanReviewer")
   branch              Branch?               @relation(fields: [branchId], references: [id])
   role                Role?                 @relation(fields: [roleId], references: [id])
   permissionOverrides UserPermission[]
@@ -164,6 +166,29 @@ model Asset {
   importHistory       ImportHistory?    @relation(fields: [importId], references: [id])
   assignments         AssetAssignment[]
   movementLogs        MovementLog[]
+  hardwareScans       HardwareScan[]
+}
+
+model HardwareScan {
+  id               String              @id @default(cuid())
+  assetId          String
+  submittedById    String
+  fileName         String
+  rawHtml          String
+  parsedSpecs      Json
+  isBaseline       Boolean             @default(false)
+  comparisonResult Json?
+  overallStatus    HwComparisonStatus?
+  status           HardwareScanStatus  @default(pending)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime            @default(now())
+  asset            Asset               @relation(fields: [assetId], references: [id])
+  submittedBy      SystemUser          @relation("HardwareScanSubmitter", fields: [submittedById], references: [id])
+  reviewedBy       SystemUser?         @relation("HardwareScanReviewer", fields: [reviewedById], references: [id])
+
+  @@index([assetId, isBaseline])
 }
 
 model AssetAssignment {
@@ -360,6 +385,19 @@ enum RowOutcome {
   failed
   duplicate
   overwritten
+}
+
+enum HwComparisonStatus {
+  match
+  warning
+  mismatch
+}
+
+enum HardwareScanStatus {
+  pending
+  reviewed
+  flagged
+  archived
 }
 
 enum ScanRoomStatus {
