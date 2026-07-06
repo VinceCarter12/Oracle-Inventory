@@ -27,7 +27,7 @@ tags: [dashboard]
 |------|--------|
 | SvelteKit frontend (oracle-sv) | In progress — dashboard done; hardware audit upload + asset Hardware section live |
 | Express API (oracle-api) | In progress — 17 route modules; hardware-audit (Belarc parse + compare) added 2026-07-06 |
-| Hardware Audit feature | Phases A–C done (parser, baseline flow, comparison) — Phase D review queue next |
+| Hardware Audit feature | ✅ Complete (A–D) — parser, baseline flow, comparison, review queue + sidebar badge. Phase E deferred |
 | V2 features (RBAC, OTP, Branches) | Complete — OTP login page deferred |
 | Import system | Complete — Excel/CSV importer |
 | Deployment | Pending — Hostinger FTP (legacy), SvelteKit adapter TBD |
@@ -109,6 +109,6 @@ tags: [dashboard]
 
 ## Recent Sessions
 
-- [[Journal/2026-07-06]] — Hardware Audit Phases A–C: Belarc parser · upload/baseline flow · comparison engine (tier diff, live-tested tamper detection) · fixed stale super_admin permissions in dev DB
+- [[Journal/2026-07-06]] — Hardware Audit COMPLETE (A–D): Belarc parser · upload/baseline flow · comparison engine · admin review queue + detail + sidebar badge (browser-verified) · fixed stale super_admin permissions in dev DB
 - [[Journal/2026-07-03]] — Dashboard complete · `/reports` deleted per ADR · Export CSV + DateRangePicker added to dashboard header
 - [[Journal/2026-06-28]] — Catch-up: full history reconstructed from git log

@@ -515,12 +515,15 @@ Overall status = worst status across all fields.
 - [x] 12 unit tests (`compare.test.ts`): self-compare = clean match, hard/soft mutations, removed RAM stick, added drive, skip-churn ignored, mixed severity, summary math
 - Verified live: identical file → match (112 compared fields); tampered file (drive serial + OS version) → mismatch with exactly the 2 expected flags; baseline swap → pending scan recomputed to mismatch
 
-### Phase D — Admin Review Queue
-- [ ] `GET /api/hardware-audit/scans` — list with filters
-- [ ] `PUT /api/hardware-audit/scans/:id/review` — mark reviewed / flag / archive
-- [ ] `/hardware-audit` queue page
-- [ ] `/hardware-audit/[scanId]` comparison detail page
-- [ ] Sidebar badge for pending mismatches
+### Phase D — Admin Review Queue ✅ COMPLETE 2026-07-06
+- [x] `GET /api/hardware-audit/scans` — filters (status, overallStatus, branchId, assetId), pagination, summary counts; sorted pending → worst → newest
+- [x] `PUT /api/hardware-audit/scans/:id/review` — mark reviewed / flag / archive with notes (`approve_transactions`); logs `hardware_scan_<action>`
+- [x] `GET /api/hardware-audit/badge` — lightweight pending-mismatch count for the sidebar dot
+- [x] `/hardware-audit` queue page — filters, summary chips, sorted rows (reviewed rows muted), pagination, row click → detail
+- [x] `/hardware-audit/[scanId]` comparison detail page — overall result card, comparison table grouped by section (flagged sections first, explanation boxes on flagged rows), admin review box (notes + Flag / Mark Reviewed / Archive), sandboxed original-report modal, accept-as-baseline
+- [x] Sidebar "Hardware Audit" nav item (new `cpu` icon) with red dot while pending mismatches exist
+- Verified in the browser end-to-end (Playwright): login → queue → detail → flag with notes → status FLAGGED; raw-report modal renders with sandbox blocking the report's local file:// assets (expected console noise, not a bug)
+- Note: email-on-mismatch (open question #2) still open — not wired
 
 ### Phase E — Exit Check Integration *(deferred)*
 - [ ] Trigger hardware audit requirement when employee offboarding starts

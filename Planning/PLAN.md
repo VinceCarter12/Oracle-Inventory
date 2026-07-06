@@ -190,8 +190,8 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | `/settings` | ✅ Done | Workspace, Integrations, Security tabs |
 | `/activity` | 🔶 Scaffolded | Activity log viewer — backend done, frontend minimal |
 | `/hardware-audit/upload` | ✅ Done | Belarc scan upload — 3-step flow w/ dry-run parse + comparison preview |
-| `/hardware-audit` | 🔲 Planned | Admin scan review queue (Phase D) |
-| `/hardware-audit/[scanId]` | 🔲 Planned | Baseline vs scan comparison detail (Phase D) |
+| `/hardware-audit` | ✅ Done | Admin scan review queue — filters, summary chips, pagination |
+| `/hardware-audit/[scanId]` | ✅ Done | Baseline vs scan comparison detail + review actions |
 
 #### Scan Group (mobile layout)
 | Route | Status | Description |
@@ -221,7 +221,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **maintenance** | Full CRUD + cron scheduler on startup | ✅ Done |
 | **reports** | GET /dashboard, /utilization, /by-branch, /by-department | ✅ Done |
 | **lookup** | GET /employees, /assets, /branches, /departments, /categories | ✅ Done |
-| **hardware-audit** | POST /scan (w/ dryRun), GET /scans, /scans/:id, /scans/:id/raw, /baseline/:assetId, PUT /scans/:id/baseline | 🔶 Phase D adds /scans/:id/review |
+| **hardware-audit** | POST /scan (w/ dryRun), GET /scans (filters+summary), /scans/:id, /scans/:id/raw, /baseline/:assetId, /badge, PUT /scans/:id/baseline, /scans/:id/review | ✅ Done |
 
 ### Middleware
 
@@ -304,13 +304,13 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [ ] **Wire scan UI to backend — multi-device room handoff**
 - [ ] **Admin review queue fully functional**
 
-### Phase 10 — Hardware Audit 🔶 IN PROGRESS
+### Phase 10 — Hardware Audit ✅ COMPLETE (Phase E deferred)
 > Full plan + wireframes: `Planning/Pages/HardwareAudit.md`
 > **2026-07-03**: No manual baseline entry — first accepted scan IS the baseline. Belarc HTML structure verified against a real export (`.reportSection` divs).
 - [x] Phase A: Server-side Belarc HTML parser (`parseBelarc` — 21 recorded sections, volatility tiers) ✅ 2026-07-06 — `oracle-api/src/lib/belarc/`, 20 tests against real export fixture
 - [x] Phase B: `HardwareScan` model + upload page + accept-as-baseline flow + Hardware section on asset detail ✅ 2026-07-06 — `/api/hardware-audit/*` (6 endpoints), `/hardware-audit/upload`, smoke-tested end-to-end
 - [x] Phase C: Comparison engine — new scan vs baseline scan (parsed JSON diff) ✅ 2026-07-06 — `compareSpecs` w/ tier severity, missing/added detection, pending-scan recompute on baseline swap, 12 tests
-- [ ] Phase D: Admin review queue (`/hardware-audit`) + comparison detail (`/hardware-audit/[scanId]`)
+- [x] Phase D: Admin review queue (`/hardware-audit`) + comparison detail (`/hardware-audit/[scanId]`) ✅ 2026-07-06 — filters/chips/pagination, review actions, sidebar badge; browser-verified
 - [ ] Phase E *(deferred)*: Exit check block on employee offboarding
 
 ### Phase 11 — Deployment 🔲 NOT STARTED
@@ -342,7 +342,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **Scan system** | 🔶 Backend done — UI needs wiring |
 | **Reports** | ✅ Merged into Dashboard — `/reports` route deleted per ADR; backend endpoints feed dashboard + CSV export |
 | **Activity log** | 🔶 Backend done — UI needs data wiring |
-| **Hardware audit** | 🔶 Phases A–C done (parser, upload/baseline flow, comparison engine) — D (admin review queue + detail page) remains |
+| **Hardware audit** | ✅ Phases A–D complete — parser, upload/baseline, comparison, review queue + sidebar badge. Phase E (exit-check block) deferred |
 | **Deployment** | 🔲 Not started — SvelteKit adapter not chosen |
 
 ---
@@ -360,7 +360,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | 5 | Choose SvelteKit adapter + configure deployment | High |
 | 6 | Production env setup + deploy | High |
 | 7 | Advanced map on Branch detail (Mapbox vs Leaflet — still evaluating) | Low |
-| 8 | **Hardware Audit feature** — Phases A–C ✅ done 2026-07-06; Phase D (admin review queue) remains | Medium |
+| 8 | ~~Hardware Audit feature~~ ✅ Phases A–D done 2026-07-06 — only Phase E (offboarding exit-check) deferred, pending Sir Jay's confirmation | — |
 
 ---
 

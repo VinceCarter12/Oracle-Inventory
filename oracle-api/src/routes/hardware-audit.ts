@@ -138,27 +138,78 @@ router.post(
   }
 );
 
-// ── GET /api/hardware-audit/scans?assetId= ────────────────────────────────────
+// ── GET /api/hardware-audit/scans ─────────────────────────────────────────────
+// Filters: assetId, status, overallStatus, branchId. Paginated. Summary counts
+// (for the queue chips) ignore the status/overallStatus filters so the chips
+// stay stable while filtering, but respect assetId/branchId scoping.
 router.get(
   "/scans",
   requireAuth,
   requirePermission("view_inventory"),
   async (req: AuthRequest, res: Response) => {
     try {
-      const assetId = req.query.assetId as string | undefined;
-      const scans = await prisma.hardwareScan.findMany({
-        where: assetId ? { assetId } : undefined,
-        orderBy: { createdAt: "desc" },
-        take: 100,
-        select: {
-          ...scanSummarySelect,
-          asset: { select: { id: true, name: true, serialNumber: true, branch: { select: { id: true, name: true } } } },
-        },
+      const { assetId, status, overallStatus, branchId } = req.query as Record<string, string | undefined>;
+      const page = Math.max(1, parseInt((req.query.page as string) ?? "1", 10) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt((req.query.pageSize as string) ?? "20", 10) || 20));
+
+      const scope = {
+        ...(assetId ? { assetId } : {}),
+        ...(branchId ? { asset: { branchId } } : {}),
+      };
+      const where = {
+        ...scope,
+        ...(status && ["pending", "reviewed", "flagged", "archived"].includes(status) ? { status: status as never } : {}),
+        ...(overallStatus && ["match", "warning", "mismatch"].includes(overallStatus) ? { overallStatus: overallStatus as never } : {}),
+      };
+
+      // Sorted for the review queue: pending first, worst comparison first, newest first
+      const [scans, total, mismatches, warnings, clean, pendingMismatches] = await Promise.all([
+        prisma.hardwareScan.findMany({
+          where,
+          orderBy: [{ status: "asc" }, { overallStatus: "desc" }, { createdAt: "desc" }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: {
+            ...scanSummarySelect,
+            asset: { select: { id: true, name: true, serialNumber: true, branch: { select: { id: true, name: true } } } },
+          },
+        }),
+        prisma.hardwareScan.count({ where }),
+        prisma.hardwareScan.count({ where: { ...scope, isBaseline: false, overallStatus: "mismatch" } }),
+        prisma.hardwareScan.count({ where: { ...scope, isBaseline: false, overallStatus: "warning" } }),
+        prisma.hardwareScan.count({ where: { ...scope, isBaseline: false, overallStatus: "match" } }),
+        prisma.hardwareScan.count({ where: { ...scope, isBaseline: false, overallStatus: "mismatch", status: "pending" } }),
+      ]);
+
+      res.json({
+        scans,
+        total,
+        page,
+        pageSize,
+        summary: { mismatches, warnings, clean, pendingMismatches },
       });
-      res.json(scans);
     } catch (e) {
       console.error("hardware-audit list failed:", e);
       res.status(500).json({ error: "Failed to load scans." });
+    }
+  }
+);
+
+// ── GET /api/hardware-audit/badge ─────────────────────────────────────────────
+// Lightweight count for the sidebar red-dot badge.
+router.get(
+  "/badge",
+  requireAuth,
+  requirePermission("view_inventory"),
+  async (_req: AuthRequest, res: Response) => {
+    try {
+      const pendingMismatches = await prisma.hardwareScan.count({
+        where: { isBaseline: false, overallStatus: "mismatch", status: "pending" },
+      });
+      res.json({ pendingMismatches });
+    } catch (e) {
+      console.error("hardware-audit badge failed:", e);
+      res.status(500).json({ error: "Failed to load badge count." });
     }
   }
 );
@@ -299,6 +350,55 @@ router.put(
     } catch (e) {
       console.error("hardware-audit baseline accept failed:", e);
       res.status(500).json({ error: "Failed to accept baseline." });
+    }
+  }
+);
+
+// ── PUT /api/hardware-audit/scans/:scanId/review ──────────────────────────────
+// Mark reviewed, flag for action, or archive — with optional admin notes.
+router.put(
+  "/scans/:scanId/review",
+  requireAuth,
+  requirePermission("approve_transactions"),
+  async (req: AuthRequest, res: Response) => {
+    const { action, notes } = req.body as { action?: string; notes?: string };
+    if (!action || !["reviewed", "flagged", "archived"].includes(action)) {
+      res.status(400).json({ error: "action must be one of: reviewed, flagged, archived." });
+      return;
+    }
+    try {
+      const scan = await prisma.hardwareScan.findUnique({
+        where: { id: req.params.scanId },
+        select: { id: true, assetId: true, isBaseline: true },
+      });
+      if (!scan) {
+        res.status(404).json({ error: "Scan not found." });
+        return;
+      }
+
+      const updated = await prisma.hardwareScan.update({
+        where: { id: scan.id },
+        data: {
+          status: action as never,
+          reviewedById: req.user!.id,
+          reviewedAt: new Date(),
+          reviewNotes: notes?.trim() || null,
+        },
+        select: scanSummarySelect,
+      });
+
+      await logActivity({
+        userId: req.user!.id,
+        action: `hardware_scan_${action}`,
+        entity: "Asset",
+        entityId: scan.assetId,
+        metadata: { scanId: scan.id, notes: notes?.trim() || null },
+      });
+
+      res.json(updated);
+    } catch (e) {
+      console.error("hardware-audit review failed:", e);
+      res.status(500).json({ error: "Failed to update review status." });
     }
   }
 );

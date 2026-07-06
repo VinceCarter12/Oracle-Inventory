@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import NavIcon from './NavIcon.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { api } from '$lib/api';
 
   interface Props {
     mobileSidebarOpen?: boolean;
@@ -50,6 +52,7 @@
           ],
         },
         { id: 'assignments', label: 'Assignments', icon: 'clipboard', href: '/assignments', permission: 'view_inventory' },
+        { id: 'hardware-audit', label: 'Hardware Audit', icon: 'cpu', href: '/hardware-audit', permission: 'view_inventory' },
       ],
     },
     {
@@ -64,7 +67,6 @@
       items: [
         { id: 'users',     label: 'Users',          icon: 'shield',   href: '/users',    permission: 'manage_users' },
         { id: 'roles',     label: 'Roles',          icon: 'shield',   href: '/roles',    permission: 'assign_roles' },
-        { id: 'reports',   label: 'Reports',        icon: 'analytics',href: '/reports',  permission: 'view_reports' },
         { id: 'activity',  label: 'Activity Logs',  icon: 'activity', href: '/activity', permission: 'access_logs' },
         { id: 'settings',  label: 'Settings',       icon: 'settings', href: '/settings', permission: 'manage_settings' },
       ],
@@ -109,6 +111,14 @@
 
   let expanded = $state(true);
   let openIds  = $state(new Set<string>());
+
+  // Red-dot badge on Hardware Audit while pending mismatches await review
+  let hwPendingMismatches = $state(0);
+  onMount(async () => {
+    if (!allowed('view_inventory')) return;
+    const badge = await api.get<{ pendingMismatches: number }>('/api/hardware-audit/badge').catch(() => null);
+    hwPendingMismatches = badge?.pendingMismatches ?? 0;
+  });
 
   // Derive active state from the current URL
   const pathname = $derived($page.url.pathname);
@@ -165,9 +175,8 @@
   function toggle() {
     if (mobileSidebarOpen) {
       onMobileClose();
-    } else {
-      expanded = !expanded;
     }
+    // Desktop sidebar is always expanded — no collapse
   }
   function navigate(href: string) { goto(href); }
   function logout() {
@@ -198,27 +207,16 @@
     <button
       class="logo-btn"
       onclick={toggle}
-      aria-expanded={expanded}
-      aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+      aria-label="Oracle Inventory"
     >
       <img src="/oracle-logo.png" alt="Oracle logo" class="logo-img" />
     </button>
     <span class="menu-label">Menu</span>
-    <button
-      class="collapse-toggle"
-      onclick={toggle}
-      aria-label="Collapse sidebar"
-      title="Collapse sidebar"
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
   </div>
 
   <!-- ── Nav ───────────────────────────────────────────────────────────── -->
   <nav class="sidebar-nav" aria-label="Main navigation">
-    {#each nav as group, gi}
+    {#each nav as group, gi (group.label ?? '__dashboard__')}
       {#if gi > 0}
         <div class="nav-sep" role="separator"></div>
       {/if}
@@ -227,7 +225,7 @@
         <span class="nav-section-label" aria-hidden="true">{group.label}</span>
       {/if}
 
-      {#each group.items as item}
+      {#each group.items as item (item.id)}
         <button
           class="nav-item"
           class:active={isActive(item)}
@@ -240,12 +238,14 @@
           }}
           aria-current={activeId === item.id ? 'page' : undefined}
           aria-expanded={item.children?.length ? openIds.has(item.id) : undefined}
-          title={!expanded ? item.label : undefined}
         >
           <span class="icon-box">
             <NavIcon name={item.icon} size={18} />
           </span>
           <span class="item-label">{item.label}</span>
+          {#if item.id === 'hardware-audit' && hwPendingMismatches > 0}
+            <span class="alert-dot" title="{hwPendingMismatches} pending mismatch{hwPendingMismatches === 1 ? '' : 'es'}" aria-label="{hwPendingMismatches} pending mismatches"></span>
+          {/if}
           {#if item.children?.length}
             <span class="item-badge" aria-hidden="true">
               {openIds.has(item.id) ? '−' : '+'}
@@ -302,7 +302,7 @@
 <style>
   /* ── Shell ──────────────────────────────────────────────────────────── */
   .sidebar {
-    width: 56px;
+    width: 240px;
     height: 100vh;
     position: sticky;
     top: 0;
@@ -312,13 +312,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* Width animates; overflow:hidden clips labels while narrow */
-    transition: width 300ms ease-in-out;
     z-index: 40;
-  }
-
-  .sidebar.expanded {
-    width: 240px;
   }
 
   /* ── Head ───────────────────────────────────────────────────────────── */
@@ -338,28 +332,16 @@
   */
   .logo-btn {
     width: 36px;
-    height: 76px;
+    height: 36px;
     border-radius: 999px;
-    background: var(--ink);
-    color: var(--on-primary);
+    background: transparent;
+    color: var(--ink);
     border: none;
-    cursor: pointer;
+    cursor: default;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition:
-      height 300ms ease-in-out,
-      background 300ms ease-in-out,
-      color 200ms ease;
-  }
-
-  .logo-btn:hover {
-    opacity: 0.85;
-  }
-
-  .logo-btn:active {
-    transform: scale(0.95);
   }
 
   .logo-img {
@@ -369,18 +351,6 @@
     display: block;
   }
 
-  /* Tint logo white when button is in pill (collapsed) state */
-  .sidebar:not(.expanded) .logo-img {
-    filter: brightness(0) invert(1);
-  }
-
-  .sidebar.expanded .logo-btn {
-    height: 36px;
-    background: transparent;
-    color: var(--ink);
-  }
-
-  /* "Menu" label — hidden when collapsed, fades in when expanded */
   .menu-label {
     font-size: 14px;
     font-weight: 600;
@@ -388,15 +358,6 @@
     color: var(--ink);
     letter-spacing: -0.3px;
     white-space: nowrap;
-    opacity: 0;
-    /* Fast fade-out (no delay) so it disappears before width collapses */
-    transition: opacity 100ms ease 0ms;
-  }
-
-  .sidebar.expanded .menu-label {
-    opacity: 1;
-    /* Fade in after the width has started opening */
-    transition: opacity 200ms ease 150ms;
   }
 
   /* ── Nav ────────────────────────────────────────────────────────────── */
@@ -421,7 +382,6 @@
     margin: 6px 0;
   }
 
-  /* Section label — shown when expanded, hidden when collapsed */
   .nav-section-label {
     display: block;
     font-size: 10.5px;
@@ -431,17 +391,7 @@
     color: var(--mute);
     padding: 4px 8px 2px;
     white-space: nowrap;
-    overflow: hidden;
-    opacity: 0;
-    max-height: 0;
-    transition: opacity 100ms ease 0ms, max-height 100ms ease 0ms;
     pointer-events: none;
-  }
-
-  .sidebar.expanded .nav-section-label {
-    opacity: 1;
-    max-height: 24px;
-    transition: opacity 200ms ease 150ms, max-height 200ms ease 150ms;
   }
 
   /*
@@ -479,36 +429,18 @@
     transition: background 120ms ease, box-shadow 120ms ease;
   }
 
-  /* Collapsed: strip left padding so icon-box centers at 28px (10px nav-padding + 18px icon-half) */
-  .sidebar:not(.expanded) .nav-item {
-    padding-left: 0;
-  }
-
-  /* Collapsed hover → subtle circle on icon-box */
-  .sidebar:not(.expanded) .nav-item:hover .icon-box {
+  /* Hover → light bg on full nav-item row */
+  .nav-item:hover:not(.active) {
     background: oklch(93% 0.002 106);
   }
 
-  /* Collapsed active → white circle with elevation on icon-box */
-  .sidebar:not(.expanded) .nav-item.active .icon-box {
-    background: var(--canvas);
-    box-shadow: var(--shadow-l2);
-    color: var(--ink);
-  }
-
-  /* Expanded hover → light bg on full nav-item row */
-  .sidebar.expanded .nav-item:hover:not(.active) {
-    background: oklch(93% 0.002 106);
-  }
-
-  /* Expanded active → black pill on full nav-item */
-  .sidebar.expanded .nav-item.active {
+  /* Active → black pill on full nav-item */
+  .nav-item.active {
     background: var(--ink);
     color: var(--on-primary);
   }
 
-  /* Reset icon-box in expanded active (pill handles the bg) */
-  .sidebar.expanded .nav-item.active .icon-box {
+  .nav-item.active .icon-box {
     background: transparent;
     box-shadow: none;
   }
@@ -520,13 +452,6 @@
     letter-spacing: -0.1px;
     white-space: nowrap;
     flex: 1;
-    opacity: 0;
-    transition: opacity 100ms ease 0ms; /* snap out fast before collapse */
-  }
-
-  .sidebar.expanded .item-label {
-    opacity: 1;
-    transition: opacity 200ms ease 150ms; /* delay — wait for width to open */
   }
 
   /* Badge: +/− for groups */
@@ -541,17 +466,18 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 100ms ease 0ms;
-  }
-
-  .sidebar.expanded .item-badge {
-    opacity: 1;
-    transition: opacity 200ms ease 150ms;
   }
 
   .nav-item.active .item-badge {
     background: oklch(100% 0 0 / 18%);
+  }
+
+  .alert-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--error);
+    flex-shrink: 0;
   }
 
   /* ── Sub-items ──────────────────────────────────────────────────────── */
@@ -614,17 +540,6 @@
     padding: 4px 10px 14px;
   }
 
-  /* Collapsed: center the avatar by centering the whole row */
-  .sidebar:not(.expanded) .sidebar-foot {
-    padding: 4px 0 14px;
-  }
-
-  .sidebar:not(.expanded) .user-row {
-    justify-content: center;
-    padding: 6px 0;
-    gap: 0;
-  }
-
   .foot-sep {
     height: 1px;
     background: var(--hairline);
@@ -661,13 +576,6 @@
     gap: 1px;
     flex: 1;
     min-width: 0;
-    opacity: 0;
-    transition: opacity 100ms ease 0ms;
-  }
-
-  .sidebar.expanded .user-text {
-    opacity: 1;
-    transition: opacity 200ms ease 150ms;
   }
 
   .user-name {
@@ -704,13 +612,7 @@
     justify-content: center;
     align-self: center;
     flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 100ms ease 0ms, color 120ms ease, background 120ms ease;
-  }
-
-  .sidebar.expanded .gear-btn {
-    opacity: 1;
-    transition: opacity 200ms ease 150ms, color 120ms ease, background 120ms ease;
+    transition: color 120ms ease, background 120ms ease;
   }
 
   .gear-btn:hover {
@@ -754,31 +656,4 @@
     }
   }
 
-  /* ── Collapse toggle ─────────────────────────────────────────────────────── */
-  .collapse-toggle {
-    margin-left: auto;
-    background: none;
-    border: 1px solid var(--hairline);
-    border-radius: var(--r-sm);
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--mute);
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 100ms ease 0ms, color 120ms ease, background 120ms ease;
-  }
-
-  .sidebar.expanded .collapse-toggle {
-    opacity: 1;
-    transition: opacity 200ms ease 150ms, color 120ms ease, background 120ms ease;
-  }
-
-  .collapse-toggle:hover {
-    color: var(--body);
-    background: oklch(93% 0.002 106);
-  }
 </style>

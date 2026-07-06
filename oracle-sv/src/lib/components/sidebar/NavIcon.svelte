@@ -54,5 +54,9 @@
   {:else if name === 'shield'}
     <path d="M12 3L4 7V13C4 17.418 7.582 21 12 21C16.418 21 20 17.418 20 13V7L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  {:else if name === 'cpu'}
+    <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+    <rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M9 2V5M15 2V5M9 19V22M15 19V22M2 9H5M2 15H5M19 9H22M19 15H22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   {/if}
 </svg>

@@ -138,7 +138,9 @@
   async function loadHardware() {
     const id = $page.params.id;
     hwBaseline = await api.get<HwBaseline | null>(`/api/hardware-audit/baseline/${id}`).catch(() => null);
-    hwScans    = await api.get<HwScan[]>(`/api/hardware-audit/scans?assetId=${id}`).catch(() => []);
+    hwScans    = await api.get<{ scans: HwScan[] }>(`/api/hardware-audit/scans?assetId=${id}&pageSize=50`)
+      .then((r) => r.scans)
+      .catch(() => []);
   }
 
   const hwHeadline = $derived.by((): { label: string; value: string }[] => {
@@ -597,6 +599,7 @@
                       </button>
                     {/if}
                     <button class="hw-link" onclick={() => hwViewRaw(scan.id)}>View report</button>
+                    <button class="hw-link" onclick={() => goto(`/hardware-audit/${scan.id}`)}>Details</button>
                   </div>
                 </div>
               {/each}
