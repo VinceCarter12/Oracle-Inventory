@@ -304,14 +304,14 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [ ] **Wire scan UI to backend — multi-device room handoff**
 - [ ] **Admin review queue fully functional**
 
-### Phase 10 — Hardware Audit ✅ COMPLETE (Phase E deferred)
+### Phase 10 — Hardware Audit ✅ COMPLETE (A–E)
 > Full plan + wireframes: `Planning/Pages/HardwareAudit.md`
 > **2026-07-03**: No manual baseline entry — first accepted scan IS the baseline. Belarc HTML structure verified against a real export (`.reportSection` divs).
 - [x] Phase A: Server-side Belarc HTML parser (`parseBelarc` — 21 recorded sections, volatility tiers) ✅ 2026-07-06 — `oracle-api/src/lib/belarc/`, 20 tests against real export fixture
 - [x] Phase B: `HardwareScan` model + upload page + accept-as-baseline flow + Hardware section on asset detail ✅ 2026-07-06 — `/api/hardware-audit/*` (6 endpoints), `/hardware-audit/upload`, smoke-tested end-to-end
 - [x] Phase C: Comparison engine — new scan vs baseline scan (parsed JSON diff) ✅ 2026-07-06 — `compareSpecs` w/ tier severity, missing/added detection, pending-scan recompute on baseline swap, 12 tests
 - [x] Phase D: Admin review queue (`/hardware-audit`) + comparison detail (`/hardware-audit/[scanId]`) ✅ 2026-07-06 — filters/chips/pagination, review actions, sidebar badge; browser-verified
-- [ ] Phase E *(deferred)*: Exit check block on employee offboarding
+- [x] Phase E: Exit check block on employee offboarding ✅ 2026-07-06 — enrolled assets need a reviewed scan before any return path completes (approve-return, direct return, turnover); 409 with actionable message
 
 ### Phase 11 — Deployment 🔲 NOT STARTED
 - [ ] Choose SvelteKit adapter (`adapter-node` for self-hosted or `adapter-vercel`)
@@ -342,7 +342,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **Scan system** | 🔶 Backend done — UI needs wiring |
 | **Reports** | ✅ Merged into Dashboard — `/reports` route deleted per ADR; backend endpoints feed dashboard + CSV export |
 | **Activity log** | 🔶 Backend done — UI needs data wiring |
-| **Hardware audit** | ✅ Phases A–D complete — parser, upload/baseline, comparison, review queue + sidebar badge. Phase E (exit-check block) deferred |
+| **Hardware audit** | ✅ COMPLETE (A–E) — parser, upload/baseline, comparison, review queue, exit-check block on returns |
 | **Deployment** | 🔲 Not started — SvelteKit adapter not chosen |
 
 ---
@@ -360,7 +360,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | 5 | Choose SvelteKit adapter + configure deployment | High |
 | 6 | Production env setup + deploy | High |
 | 7 | Advanced map on Branch detail (Mapbox vs Leaflet — still evaluating) | Low |
-| 8 | ~~Hardware Audit feature~~ ✅ Phases A–D done 2026-07-06 — only Phase E (offboarding exit-check) deferred, pending Sir Jay's confirmation | — |
+| 8 | ~~Hardware Audit feature~~ ✅ ALL phases (A–E) done 2026-07-06 — only email-on-mismatch notification still open (question #2) | — |
 
 ---
 

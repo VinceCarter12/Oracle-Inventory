@@ -166,6 +166,19 @@
     return rows;
   });
 
+  // Exit check (Phase E): enrolled assets can only be returned once their
+  // latest scan is reviewed — mirror the server rule for visibility
+  const hwExitCheck = $derived.by(() => {
+    if (!hwBaseline) return null;
+    const latest = hwScans
+      .filter((s) => !s.isBaseline && s.status !== 'archived')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (!latest) return { label: 'Exit check: scan required', cls: 'badge-red' };
+    if (latest.status === 'reviewed') return { label: 'Exit check: cleared', cls: 'badge-green' };
+    if (latest.status === 'flagged') return { label: 'Exit check: flagged', cls: 'badge-red' };
+    return { label: 'Exit check: awaiting review', cls: 'badge-orange' };
+  });
+
   async function hwAcceptBaseline(scanId: string) {
     hwAccepting = scanId;
     hwErr = '';
@@ -559,6 +572,9 @@
             <div class="hw-baseline-meta">
               Baseline accepted {fmtDate(hwBaseline.createdAt)}{hwBaseline.submittedBy ? ` · uploaded by ${hwBaseline.submittedBy.name}` : ''}
               <button class="hw-link" onclick={() => hwViewRaw(hwBaseline!.id)}>View original Belarc report</button>
+              {#if hwExitCheck}
+                <span class="badge {hwExitCheck.cls}" title="Audit-enrolled assets can only be returned after their latest scan is reviewed">{hwExitCheck.label}</span>
+              {/if}
             </div>
             <div class="field-grid">
               {#each hwHeadline as row}

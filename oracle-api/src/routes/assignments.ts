@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 import { logActivity } from "../lib/activity";
+import { getExitCheckState, isExitCheckBlocked, exitCheckMessage } from "../lib/belarc/exitCheck";
 
 const router = Router();
 router.use(requireAuth);
@@ -113,6 +114,13 @@ router.put("/:id/approve-return", requirePermission("approve_transactions"), asy
   if (!assignment) { res.status(404).json({ error: "Assignment not found" }); return; }
   if (assignment.status !== "pending_return") { res.status(400).json({ error: "Assignment is not pending return" }); return; }
 
+  // Hardware Audit exit check — audit-enrolled assets need a reviewed scan first
+  const exitCheck = await getExitCheckState(assignment.assetId);
+  if (isExitCheckBlocked(exitCheck)) {
+    res.status(409).json({ error: exitCheckMessage(assignment.asset.name, exitCheck), exitCheck });
+    return;
+  }
+
   const updated = await prisma.assetAssignment.update({
     where: { id: req.params.id },
     data: { status: "returned", returnedAt: new Date() },
@@ -170,6 +178,13 @@ router.post("/:id/return", requirePermission("approve_transactions"), async (req
   });
   if (!assignment) { res.status(404).json({ error: "Assignment not found" }); return; }
   if (assignment.status === "returned") { res.status(400).json({ error: "Assignment is already returned" }); return; }
+
+  // Hardware Audit exit check applies to direct returns too
+  const exitCheck = await getExitCheckState(assignment.assetId);
+  if (isExitCheckBlocked(exitCheck)) {
+    res.status(409).json({ error: exitCheckMessage(assignment.asset.name, exitCheck), exitCheck });
+    return;
+  }
 
   const updated = await prisma.assetAssignment.update({
     where: { id: req.params.id },

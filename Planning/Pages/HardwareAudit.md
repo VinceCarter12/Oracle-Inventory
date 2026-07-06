@@ -525,9 +525,17 @@ Overall status = worst status across all fields.
 - Verified in the browser end-to-end (Playwright): login → queue → detail → flag with notes → status FLAGGED; raw-report modal renders with sandbox blocking the report's local file:// assets (expected console noise, not a bug)
 - Note: email-on-mismatch (open question #2) still open — not wired
 
-### Phase E — Exit Check Integration *(deferred)*
-- [ ] Trigger hardware audit requirement when employee offboarding starts
-- [ ] Block return approval until scan submitted and reviewed
+### Phase E — Exit Check Integration ✅ COMPLETE 2026-07-06 (un-deferred, confirmed by Vince)
+- [x] Exit-check rule (`oracle-api/src/lib/belarc/exitCheck.ts`): an asset is **audit-enrolled** once it has a baseline; enrolled assets can only be returned when their latest non-baseline, non-archived scan is `reviewed`
+  - States: `not_required` (no baseline) / `missing` (no scan) / `pending` / `flagged` / `cleared` — missing/pending/flagged block the return
+- [x] Enforced on all three return paths (409 with actionable message + `exitCheck` state):
+  - `PUT /api/assignments/:id/approve-return`
+  - `POST /api/assignments/:id/return` (direct return)
+  - `POST /api/turnover/resignation/:employeeId` (whole collection refused, `blockedAssets` listed)
+- [x] `GET /api/turnover/resignation/:employeeId` now returns `exitCheck` per assigned asset — ready for the future offboarding UI
+- [x] Asset detail Hardware section shows an "Exit check: cleared / awaiting review / flagged / scan required" chip (client-side mirror of the server rule)
+- [x] 9 unit tests on the pure classifier; full lifecycle verified live (blocked while pending on direct return + turnover → cleared after review)
+- Note: return modals in oracle-sv surface the 409 message via their existing error states — no dedicated offboarding UI exists yet (turnover API has no SvelteKit consumer)
 
 ---
 
@@ -539,7 +547,7 @@ Overall status = worst status across all fields.
 | 2 | Do we email admin when a new scan is submitted? | Open — email on `mismatch` only, or all scans? |
 | 3 | ~~Belarc export format?~~ | ✅ **RESOLVED 2026-07-03** — single self-contained HTML at `Belarc\BelarcAdvisor\System\tmp\(ComputerName).html`, ~130 KB, `.reportSection` div structure verified |
 | 4 | ~~No baseline exists?~~ | ✅ **RESOLVED** — first scan uploaded becomes baseline after admin clicks "Accept as baseline"; no manual entry |
-| 5 | Phase E (exit check block) — required for launch? | Confirm with Sir Jay |
+| 5 | ~~Phase E (exit check block) — required for launch?~~ | ✅ **CONFIRMED 2026-07-06** — Vince green-lit building it (Phases A–D done) |
 | 6 | Raw HTML storage — DB Text column or file storage? | ~130 KB each; DB Text fine for now, revisit if scan volume grows |
 
 ---

@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { getExitCheckStates, isExitCheckBlocked, exitCheckMessage } from "../lib/belarc/exitCheck";
 
 const router = Router();
 router.use(requireAuth);
@@ -30,7 +31,17 @@ router.get("/resignation/:employeeId", async (req: AuthRequest, res: Response) =
     },
   });
   if (!employee) { res.status(404).json({ error: "Employee not found" }); return; }
-  res.json(employee);
+
+  // Hardware Audit exit check per assigned asset — lets the offboarding UI
+  // show which assets are blocked before the admin attempts collection
+  const exitChecks = await getExitCheckStates(employee.assignments.map((a) => a.asset.id));
+  res.json({
+    ...employee,
+    assignments: employee.assignments.map((a) => ({
+      ...a,
+      exitCheck: exitChecks.get(a.asset.id) ?? "not_required",
+    })),
+  });
 });
 
 // POST /api/turnover/resignation/:employeeId
@@ -41,6 +52,24 @@ router.post("/resignation/:employeeId", async (req: AuthRequest, res: Response) 
     return;
   }
   const now = new Date();
+
+  // Hardware Audit exit check — refuse the whole collection if any selected
+  // asset is audit-enrolled without a reviewed scan
+  const exitChecks = await getExitCheckStates(assetIds);
+  const blocked = assetIds.filter((id) => isExitCheckBlocked(exitChecks.get(id) ?? "not_required"));
+  if (blocked.length > 0) {
+    const assets = await prisma.asset.findMany({
+      where: { id: { in: blocked } },
+      select: { id: true, name: true },
+    });
+    res.status(409).json({
+      error: `Hardware exit check required: ${assets
+        .map((a) => exitCheckMessage(a.name, exitChecks.get(a.id) ?? "missing"))
+        .join(" ")}`,
+      blockedAssets: assets.map((a) => ({ id: a.id, name: a.name, exitCheck: exitChecks.get(a.id) })),
+    });
+    return;
+  }
 
   const assignments = await prisma.assetAssignment.findMany({
     where: {

@@ -90,8 +90,8 @@ Then write a journal entry summarizing what was built, and update Planning/PLAN.
 > Update this section manually or ask Claude to update it after each session.
 
 **Last worked on**: 2026-07-06
-**Status**: Hardware Audit COMPLETE (Phases A–D) — parser, upload/baseline, comparison engine, admin review queue + detail page + sidebar badge. Browser-verified end-to-end. Phase E (exit-check) deferred pending Sir Jay.
-**Next priority**: From PLAN.md remaining work — deployment (SvelteKit adapter + prod env, High) or wire `/activity` log page / scan system UI (Medium)
+**Status**: Hardware Audit COMPLETE — all phases A–E (parser, upload/baseline, comparison, review queue, exit-check block on all return paths). Only open item: email-on-mismatch notification (needs a decision).
+**Next priority**: Deployment (SvelteKit adapter + prod env, High) or wire `/activity` log page / scan system UI (Medium) — see PLAN.md §9
 
 ---
 
