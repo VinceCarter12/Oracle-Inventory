@@ -61,7 +61,7 @@ Oracle Inventory is a **web-based asset tracking system** for organizations that
 
 ## 3. Data Model
 
-Defined in `oracle-api/prisma/schema.prisma` — **15 models, 8 enums**.
+Defined in `oracle-api/prisma/schema.prisma` — **16 models, 10 enums**.
 
 ### RBAC & Users
 
@@ -113,6 +113,12 @@ Defined in `oracle-api/prisma/schema.prisma` — **15 models, 8 enums**.
 | `ScanDevice` | Connected mobile | deviceToken, roomId, status, lastSeenAt |
 | `ScanResult` | Scan output | roomId, deviceId, parsedData (JSON), status, assetId |
 
+### Hardware Audit
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `HardwareScan` | Belarc scan (doubles as baseline) | assetId, submittedById, rawHtml, parsedSpecs (JSON), isBaseline, comparisonResult (JSON), overallStatus, status, reviewedById |
+
 ### Enums
 
 | Enum | Values |
@@ -125,6 +131,8 @@ Defined in `oracle-api/prisma/schema.prisma` — **15 models, 8 enums**.
 | `UserStatus` | active, inactive, suspended |
 | `ImportStatus` | pending, processing, completed, partial, failed |
 | `RowOutcome` | imported, skipped, failed, duplicate, overwritten |
+| `HwComparisonStatus` | match, warning, mismatch |
+| `HardwareScanStatus` | pending, reviewed, flagged, archived |
 
 ---
 
@@ -181,6 +189,9 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | `/reports` | ❌ Removed | Deleted 2026-07-03 per ADR — metrics merged into `/dashboard`, Export CSV in dashboard header |
 | `/settings` | ✅ Done | Workspace, Integrations, Security tabs |
 | `/activity` | 🔶 Scaffolded | Activity log viewer — backend done, frontend minimal |
+| `/hardware-audit/upload` | ✅ Done | Belarc scan upload — 3-step flow w/ dry-run parse + comparison preview |
+| `/hardware-audit` | 🔲 Planned | Admin scan review queue (Phase D) |
+| `/hardware-audit/[scanId]` | 🔲 Planned | Baseline vs scan comparison detail (Phase D) |
 
 #### Scan Group (mobile layout)
 | Route | Status | Description |
@@ -190,7 +201,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 
 ---
 
-## 6. API Endpoints (`oracle-api`) — 16 route modules
+## 6. API Endpoints (`oracle-api`) — 17 route modules
 
 | Module | Key Endpoints | Status |
 |--------|--------------|--------|
@@ -210,6 +221,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **maintenance** | Full CRUD + cron scheduler on startup | ✅ Done |
 | **reports** | GET /dashboard, /utilization, /by-branch, /by-department | ✅ Done |
 | **lookup** | GET /employees, /assets, /branches, /departments, /categories | ✅ Done |
+| **hardware-audit** | POST /scan (w/ dryRun), GET /scans, /scans/:id, /scans/:id/raw, /baseline/:assetId, PUT /scans/:id/baseline | 🔶 Phase D adds /scans/:id/review |
 
 ### Middleware
 
@@ -316,7 +328,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 
 | Area | Status |
 |------|--------|
-| **Data model** | ✅ Complete — 15 models, 8 enums, seed data |
+| **Data model** | ✅ Complete — 16 models, 10 enums, seed data |
 | **Design system** | ✅ Complete — documented in `Design/DESIGN.md`, CSS tokens, Tailwind v4 |
 | **Auth (JWT)** | ✅ Complete — login, session guard, logout |
 | **Auth (OTP)** | ✅ Backend complete — frontend flows wired in settings; OTP login page TBD |
@@ -348,7 +360,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | 5 | Choose SvelteKit adapter + configure deployment | High |
 | 6 | Production env setup + deploy | High |
 | 7 | Advanced map on Branch detail (Mapbox vs Leaflet — still evaluating) | Low |
-| 8 | **Hardware Audit feature** — Phase A–D (see `Planning/Pages/HardwareAudit.md`) | Medium |
+| 8 | **Hardware Audit feature** — Phases A–C ✅ done 2026-07-06; Phase D (admin review queue) remains | Medium |
 
 ---
 

@@ -25,8 +25,9 @@ tags: [dashboard]
 
 | Area | Status |
 |------|--------|
-| SvelteKit frontend (oracle-sv) | In progress — dashboard + reports fully wired |
-| Express API (oracle-api) | In progress — most routes built |
+| SvelteKit frontend (oracle-sv) | In progress — dashboard done; hardware audit upload + asset Hardware section live |
+| Express API (oracle-api) | In progress — 17 route modules; hardware-audit (Belarc parse + compare) added 2026-07-06 |
+| Hardware Audit feature | Phases A–C done (parser, baseline flow, comparison) — Phase D review queue next |
 | V2 features (RBAC, OTP, Branches) | Complete — OTP login page deferred |
 | Import system | Complete — Excel/CSV importer |
 | Deployment | Pending — Hostinger FTP (legacy), SvelteKit adapter TBD |
