@@ -178,8 +178,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | `/roles` | ✅ Done | Role management + permission matrix |
 | `/users` | ✅ Done | User management |
 | `/users/[id]` | ✅ Done | User detail/edit |
-| `/reports` | 🔶 Scaffolded | Reports page — backend endpoints exist, UI needs data wiring |
-| `/reports/[id]` | 🔶 Scaffolded | Report detail |
+| `/reports` | ❌ Removed | Deleted 2026-07-03 per ADR — metrics merged into `/dashboard`, Export CSV in dashboard header |
 | `/settings` | ✅ Done | Workspace, Integrations, Security tabs |
 | `/activity` | 🔶 Scaffolded | Activity log viewer — backend done, frontend minimal |
 
@@ -279,7 +278,9 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 ### Phase 8 — Reports & Activity Log 🔶 IN PROGRESS
 - [x] Report aggregate endpoints (dashboard, utilization, by-branch, by-department)
 - [x] Reports page scaffolded (`/reports`, `/reports/[id]`)
-- [ ] **Wire reports UI to backend data**
+- [x] **Wire reports UI to backend data** — filters (branch, category, date range) refetch summary; CSV/PDF export working on both index and detail pages; 3 missing reports added to table (by-branch, employee-ownership, site-utilization)
+- [x] Dashboard WIP committed — ChartBar, ChartDonut, SectionCard components; permission-safe activity fetch
+- [x] `/api/reports/summary` — now accepts `branchId`, `categoryId`, `from`, `to` query params
 - [x] Activity log backend (`/api/activity`)
 - [x] Activity log page scaffolded (`/activity`)
 - [ ] **Wire activity log UI to backend data**
@@ -291,7 +292,16 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [ ] **Wire scan UI to backend — multi-device room handoff**
 - [ ] **Admin review queue fully functional**
 
-### Phase 10 — Deployment 🔲 NOT STARTED
+### Phase 10 — Hardware Audit 🔶 IN PROGRESS
+> Full plan + wireframes: `Planning/Pages/HardwareAudit.md`
+> **2026-07-03**: No manual baseline entry — first accepted scan IS the baseline. Belarc HTML structure verified against a real export (`.reportSection` divs).
+- [x] Phase A: Server-side Belarc HTML parser (`parseBelarc` — 21 recorded sections, volatility tiers) ✅ 2026-07-06 — `oracle-api/src/lib/belarc/`, 20 tests against real export fixture
+- [ ] Phase B: `HardwareScan` model + upload page + accept-as-baseline flow + Hardware tab on asset detail
+- [ ] Phase C: Comparison engine — new scan vs baseline scan (parsed JSON diff)
+- [ ] Phase D: Admin review queue (`/hardware-audit`) + comparison detail (`/hardware-audit/[scanId]`)
+- [ ] Phase E *(deferred)*: Exit check block on employee offboarding
+
+### Phase 11 — Deployment 🔲 NOT STARTED
 - [ ] Choose SvelteKit adapter (`adapter-node` for self-hosted or `adapter-vercel`)
 - [ ] Configure production environment variables
 - [ ] Set up PostgreSQL on production host
@@ -318,8 +328,9 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **Maintenance scheduling** | ✅ Complete — cron + email notifications |
 | **Bulk import** | ✅ Complete — Excel/CSV, conflict resolution, presets, history |
 | **Scan system** | 🔶 Backend done — UI needs wiring |
-| **Reports** | 🔶 Endpoints done — UI needs data wiring |
+| **Reports** | ✅ Merged into Dashboard — `/reports` route deleted per ADR; backend endpoints feed dashboard + CSV export |
 | **Activity log** | 🔶 Backend done — UI needs data wiring |
+| **Hardware audit** | 🔶 Phase A done (Belarc parser + tests) — Phases B–D remain |
 | **Deployment** | 🔲 Not started — SvelteKit adapter not chosen |
 
 ---
@@ -328,13 +339,16 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 
 | # | Task | Priority |
 |---|------|----------|
-| 1 | Wire `/reports` and `/reports/[id]` to backend data | High |
+| 1 | ~~Wire `/reports` to backend~~ — **DECISION**: Reports merged into Dashboard (see [[Decisions/2026-06-28-reports-merged-into-dashboard]]) | — |
+| 1a | ~~Merge report metrics/charts into `/dashboard` layout~~ ✅ Done 2026-07-03 — all dashboard widgets built (utilization, by-dept, condition trend, movement frequency, assignment history) | — |
+| 1b | ~~Remove `/reports` route from oracle-sv, update sidebar nav~~ ✅ Done 2026-07-03 — route deleted, Export CSV moved to dashboard header | — |
 | 2 | Wire `/activity` log page to backend | Medium |
 | 3 | Wire `/scan/mobile` and `/scan/review` to scan room backend | Medium |
 | 4 | OTP login flow on frontend (passwordless entry point) | Medium |
 | 5 | Choose SvelteKit adapter + configure deployment | High |
 | 6 | Production env setup + deploy | High |
 | 7 | Advanced map on Branch detail (Mapbox vs Leaflet — still evaluating) | Low |
+| 8 | **Hardware Audit feature** — Phase A–D (see `Planning/Pages/HardwareAudit.md`) | Medium |
 
 ---
 
