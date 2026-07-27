@@ -120,7 +120,6 @@
         longitude: editForm.longitude ? parseFloat(editForm.longitude) : null,
       });
       branches = branches.map(b => b.id === updated.id ? { ...b, ...updated } : b);
-      if (selectedId === updated.id) selectedId = updated.id;
       showEdit = false;
       editTarget = null;
     } catch (e) {

@@ -230,7 +230,6 @@
     try {
       const { BrowserMultiFormatReader } = await import('@zxing/browser');
       const reader = new BrowserMultiFormatReader();
-      // @ts-expect-error decodeFromCanvas present at runtime
       const result = await reader.decodeFromCanvas(canvas);
       const text: string = result.getText();
       if (/^\d{15}$/.test(text)) return { serial: text };
