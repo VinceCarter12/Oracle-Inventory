@@ -225,7 +225,7 @@
 </Modal>
 
 <!-- ── Delete confirmation ────────────────────────────────────────────────── -->
-<Modal bind:open={!!delRole} title="Delete role?" maxWidth="380px" onclose={() => delRole = null}>
+<Modal open={delRole !== null} title="Delete role?" maxWidth="380px" onclose={() => delRole = null}>
   <p class="confirm-text">
     Delete <strong>{delRole?.name}</strong>? This removes the role from all
     {delRole?._count.users} user{(delRole?._count.users ?? 0) !== 1 ? 's' : ''} assigned to it.
