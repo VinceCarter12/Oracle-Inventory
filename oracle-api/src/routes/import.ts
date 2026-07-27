@@ -304,18 +304,17 @@ router.post(
     let validatedRows: ValidatedRow[] = [];
     let duplicates = new Map<number, { isDuplicate: boolean; conflictKey?: string; existingAssetId?: string; existingAssetName?: string }>();
 
-    if (mappingErrors.length === 0) {
-      validatedRows = validateRows(activeSheet.rows, mappingResult.mappings, category, ingestUnmappedAsMetadata);
-      duplicates = await checkDuplicates(validatedRows);
-    } else {
-      validatedRows = activeSheet.rows.map((raw, i) => ({
-        rowIndex: i,
-        rawData: raw,
-        mappedData: {},
-        errors: [{ field: "name", message: "Required: name (column not mapped)", severity: "error" as const }],
-        warnings: [],
+    // Always run validateRows so mappedData is populated for the preview,
+    // even when required columns are missing. Mapping errors are injected below.
+    validatedRows = validateRows(activeSheet.rows, mappingResult.mappings, category, ingestUnmappedAsMetadata);
+    duplicates = await checkDuplicates(validatedRows);
+
+    if (mappingErrors.length > 0) {
+      const injected = mappingErrors.map(msg => ({ field: "name", message: msg, severity: "error" as const }));
+      validatedRows = validatedRows.map(r => ({
+        ...r,
+        errors: [...injected, ...r.errors],
         isValid: false,
-        hasWarnings: false,
       }));
     }
 
@@ -734,7 +733,13 @@ router.post(
       const orClauses: object[] = [];
       if (email)  orClauses.push({ email });
       if (empId)  orClauses.push({ employeeId: empId });
-      if (ref && !isEmailAddr(ref)) orClauses.push({ name: { equals: ref, mode: "insensitive" as const } });
+      if (ref && !isEmailAddr(ref)) {
+        orClauses.push({ name: { equals: ref, mode: "insensitive" as const } });
+        // Also match "First Last" when ref is a single token (first name only)
+        if (!ref.includes(" ")) {
+          orClauses.push({ name: { startsWith: ref + " ", mode: "insensitive" as const } });
+        }
+      }
 
       let emp = orClauses.length
         ? await prisma.employee.findFirst({

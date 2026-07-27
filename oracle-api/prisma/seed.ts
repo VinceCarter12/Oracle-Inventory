@@ -105,6 +105,58 @@ async function main() {
   });
   console.log("✓ SystemUsers: Sir Jay (super_admin)");
 
+  // ─── Branches ──────────────────────────────────────────────────────────────
+  const branches = [
+    { id: "branch-cubao",   name: "Cubao",   address: "Cubao, Quezon City" },
+    { id: "branch-malolos", name: "Malolos", address: "Malolos, Bulacan" },
+    { id: "branch-davao",   name: "Davao",   address: "Davao City" },
+  ];
+  for (const b of branches) {
+    await prisma.branch.upsert({
+      where:  { id: b.id },
+      update: { name: b.name, address: b.address },
+      create: { id: b.id, name: b.name, address: b.address },
+    });
+  }
+  console.log("✓ Branches: Cubao, Malolos, Davao");
+
+  // ─── Departments ──────────────────────────────────────────────────────────
+  const departments = [
+    { id: "dept-it",          name: "IT" },
+    { id: "dept-accounting",  name: "Accounting" },
+    { id: "dept-operations",  name: "Operations" },
+    { id: "dept-hr",          name: "HR" },
+  ];
+  for (const d of departments) {
+    await prisma.department.upsert({
+      where:  { id: d.id },
+      update: { name: d.name },
+      create: { id: d.id, name: d.name },
+    });
+  }
+  console.log("✓ Departments: IT, Accounting, Operations, HR");
+
+  // ─── Categories ───────────────────────────────────────────────────────────
+  const categories = [
+    { id: "cat-laptop",    name: "Laptop" },
+    { id: "cat-desktop",   name: "Desktop" },
+    { id: "cat-phone",     name: "Company Phone" },
+    { id: "cat-monitor",   name: "Monitor" },
+    { id: "cat-printer",   name: "Printer" },
+    { id: "cat-network",   name: "Network Equipment" },
+    { id: "cat-cctv",      name: "CCTV" },
+    { id: "cat-ip-phone",  name: "IP Phone" },
+    { id: "cat-peripheral",name: "Peripheral" },
+  ];
+  for (const c of categories) {
+    await prisma.category.upsert({
+      where:  { id: c.id },
+      update: { name: c.name },
+      create: { id: c.id, name: c.name },
+    });
+  }
+  console.log("✓ Categories: Laptop, Desktop, Phone, Monitor, Printer, Network, CCTV, IP Phone, Peripheral");
+
   console.log("\nSeed complete.");
 }
 
