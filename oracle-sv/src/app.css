@@ -29,6 +29,8 @@
   --link-bg-soft:   oklch(88.0% 0.06  264);   /* #d3e5ff */
   --error:          oklch(47.8% 0.26   28);   /* #ee0000 */
   --error-soft:     oklch(93.0% 0.04   28);   /* #f7d4d6 */
+  --warning:        oklch(75.0% 0.16   70);   /* #f5a623 */
+  --warning-soft:   oklch(95.0% 0.06   80);   /* #ffefcf */
 
   /* Brand gradient stops */
   --grad-develop-from:  oklch(53.0% 0.22 264);  /* #007cf0 */
@@ -80,9 +82,9 @@
 /* ─── Dark mode tokens ─────────────────────────────────────────────────────── */
 [data-theme="dark"] {
   /* Surfaces */
-  --canvas:         oklch(14.5% 0.006 285);
-  --canvas-soft:    oklch(17.5% 0.006 285);
-  --canvas-soft-2:  oklch(21.0% 0.006 285);
+  --canvas:         oklch(13.5% 0.006 285);
+  --canvas-soft:    oklch(16.0% 0.006 285);
+  --canvas-soft-2:  oklch(19.0% 0.006 285);
 
   /* Text */
   --ink:            oklch(97.0% 0.002 106);

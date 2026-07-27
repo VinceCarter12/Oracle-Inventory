@@ -21,15 +21,17 @@ const include = {
 
 // GET /api/assets/stats — must be before /:id
 router.get("/stats", requirePermission("view_inventory"), async (_req: AuthRequest, res: Response) => {
-  const [total, assigned, forRepair, forDisposal, lost, stolen] = await Promise.all([
+  const [total, assigned, forRepair, forDisposal, lost, stolen, available] = await Promise.all([
     prisma.asset.count(),
     prisma.assetAssignment.count({ where: { status: "active" } }),
     prisma.asset.count({ where: { condition: "for_repair" } }),
     prisma.asset.count({ where: { condition: "for_disposal" } }),
     prisma.asset.count({ where: { status: "lost" } }),
     prisma.asset.count({ where: { status: "stolen" } }),
+    prisma.asset.count({
+      where: { status: "active", condition: "usable", assignments: { none: { status: "active" } } },
+    }),
   ]);
-  const available = Math.max(0, total - assigned - forRepair - forDisposal - lost - stolen);
   res.json({ total, assigned, available, forRepair, forDisposal, lost, stolen });
 });
 

@@ -8,7 +8,7 @@ router.use(requireAuth);
 router.get("/", async (_req: AuthRequest, res: Response) => {
   const [categories, branches, employees] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    prisma.branch.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
     prisma.employee.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
