@@ -6,43 +6,77 @@ const router = Router();
 router.use(requireAuth);
 
 // GET /api/reports/summary
-router.get("/summary", requirePermission("view_reports"), async (_req: AuthRequest, res: Response) => {
+// Optional query params: branchId, categoryId (scope all aggregates),
+// from, to (YYYY-MM-DD — scope the movements-by-month window, capped at 12 months)
+router.get("/summary", requirePermission("view_reports"), async (req: AuthRequest, res: Response) => {
+  const { branchId, categoryId, from, to } = req.query as {
+    branchId?: string; categoryId?: string; from?: string; to?: string;
+  };
+
+  const assetWhere = {
+    ...(branchId ? { branchId } : {}),
+    ...(categoryId ? { categoryId } : {}),
+  };
+  // Relation filter for assignment counts when scoped by branch/category
+  const assignAssetFilter = Object.keys(assetWhere).length ? { asset: assetWhere } : {};
+
   const [totalAssets, forRepair, forDisposal] = await Promise.all([
-    prisma.asset.count(),
-    prisma.asset.count({ where: { condition: "for_repair" } }),
-    prisma.asset.count({ where: { condition: "for_disposal" } }),
+    prisma.asset.count({ where: assetWhere }),
+    prisma.asset.count({ where: { ...assetWhere, condition: "for_repair" } }),
+    prisma.asset.count({ where: { ...assetWhere, condition: "for_disposal" } }),
   ]);
 
   const assignedAssets = await prisma.assetAssignment.findMany({
-    where: { status: "active" },
+    where: { status: "active", ...assignAssetFilter },
     select: { assetId: true },
     distinct: ["assetId"],
   });
 
-  // Movements by month — last 6 months
+  // Movements by month — from/to window if provided, otherwise last 6 months
   const now = new Date();
-  const movementsByMonth: { month: string; assignments: number; returns: number }[] = [];
+  const fromDate = from ? new Date(from) : null;
+  const toDate   = to   ? new Date(to)   : null;
+  const validRange = fromDate && toDate && !isNaN(+fromDate) && !isNaN(+toDate) && fromDate <= toDate;
 
-  for (let i = 5; i >= 0; i--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-    const monthLabel = start.toLocaleString("default", { month: "short" });
-
-    const [assignmentsCount, returnsCount] = await Promise.all([
-      prisma.assetAssignment.count({ where: { assignedAt: { gte: start, lt: end } } }),
-      prisma.assetAssignment.count({
-        where: {
-          returnedAt: { gte: start, lt: end },
-          status: { in: ["returned", "transferred"] },
-        },
-      }),
-    ]);
-
-    movementsByMonth.push({ month: monthLabel, assignments: assignmentsCount, returns: returnsCount });
+  const monthStarts: Date[] = [];
+  if (validRange) {
+    const cursor = new Date(fromDate!.getFullYear(), fromDate!.getMonth(), 1);
+    const last   = new Date(toDate!.getFullYear(), toDate!.getMonth(), 1);
+    while (cursor <= last && monthStarts.length < 12) {
+      monthStarts.push(new Date(cursor));
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  } else {
+    for (let i = 5; i >= 0; i--) {
+      monthStarts.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
+    }
   }
+
+  const movementsByMonth = await Promise.all(
+    monthStarts.map(async (start) => {
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+      const monthLabel = start.toLocaleString("default", { month: "short" });
+
+      const [assignmentsCount, returnsCount] = await Promise.all([
+        prisma.assetAssignment.count({
+          where: { assignedAt: { gte: start, lt: end }, ...assignAssetFilter },
+        }),
+        prisma.assetAssignment.count({
+          where: {
+            returnedAt: { gte: start, lt: end },
+            status: { in: ["returned", "transferred"] },
+            ...assignAssetFilter,
+          },
+        }),
+      ]);
+
+      return { month: monthLabel, assignments: assignmentsCount, returns: returnsCount };
+    })
+  );
 
   // Top categories by asset count
   const allAssets = await prisma.asset.findMany({
+    where: assetWhere,
     select: {
       categoryId: true,
       category: { select: { name: true } },
@@ -65,6 +99,7 @@ router.get("/summary", requirePermission("view_reports"), async (_req: AuthReque
 
   // Branch utilization
   const branchAssets = await prisma.asset.findMany({
+    where: assetWhere,
     select: {
       branchId: true,
       branch: { select: { name: true } },
@@ -83,6 +118,46 @@ router.get("/summary", requirePermission("view_reports"), async (_req: AuthReque
   }
   const branchStats = [...branchMap.values()].sort((a, b) => b.total - a.total);
 
+  // Department stats — assets reach departments through employee assignments
+  const activeAssignments = await prisma.assetAssignment.findMany({
+    where: { status: "active", ...assignAssetFilter },
+    select: {
+      assetId: true,
+      employee: {
+        select: { id: true, department: { select: { name: true } } },
+      },
+    },
+  });
+
+  const deptMap = new Map<string, { name: string; assets: number; employees: Set<string> }>();
+  for (const a of activeAssignments) {
+    const name = a.employee?.department?.name ?? "No department";
+    if (!deptMap.has(name)) deptMap.set(name, { name, assets: 0, employees: new Set() });
+    const entry = deptMap.get(name)!;
+    entry.assets++;
+    if (a.employee) entry.employees.add(a.employee.id);
+  }
+  const deptStats = [...deptMap.values()]
+    .map((d) => ({ name: d.name, assets: d.assets, employees: d.employees.size }))
+    .sort((a, b) => b.assets - a.assets);
+
+  // Recent asset movements — assignment history widget
+  const recentMovements = await prisma.movementLog.findMany({
+    where: {
+      type: { in: ["assignment", "transfer", "return_approved", "resignation", "new_hire"] },
+      ...(Object.keys(assetWhere).length ? { asset: assetWhere } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+    select: {
+      id: true,
+      type: true,
+      createdAt: true,
+      asset: { select: { name: true, assetTag: true } },
+      employee: { select: { name: true } },
+    },
+  });
+
   res.json({
     kpi: {
       totalAssets,
@@ -94,6 +169,77 @@ router.get("/summary", requirePermission("view_reports"), async (_req: AuthReque
     movementsByMonth,
     topCategories,
     branchStats,
+    deptStats,
+    recentMovements: recentMovements.map((m) => ({
+      id: m.id,
+      type: m.type,
+      asset: m.asset.name,
+      assetTag: m.asset.assetTag,
+      employee: m.employee?.name ?? null,
+      createdAt: m.createdAt,
+    })),
+  });
+});
+
+// GET /api/reports/condition-trend
+// Monthly counts of condition-related movement events (repairs sent/returned, disposals)
+router.get("/condition-trend", requirePermission("view_reports"), async (_req: AuthRequest, res: Response) => {
+  const now = new Date();
+  const months: { month: string; repairsSent: number; repairsReturned: number; disposals: number }[] = [];
+
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const monthLabel = start.toLocaleString("default", { month: "short" });
+
+    const [repairsSent, repairsReturned, disposals] = await Promise.all([
+      prisma.movementLog.count({ where: { type: "repair_send", createdAt: { gte: start, lt: end } } }),
+      prisma.movementLog.count({ where: { type: "repair_return", createdAt: { gte: start, lt: end } } }),
+      prisma.movementLog.count({ where: { type: "disposal", createdAt: { gte: start, lt: end } } }),
+    ]);
+
+    months.push({ month: monthLabel, repairsSent, repairsReturned, disposals });
+  }
+
+  res.json({ months });
+});
+
+// GET /api/reports/movement-frequency?limit=10
+// Most-moved assets, ranked by total movement log entries
+router.get("/movement-frequency", requirePermission("view_reports"), async (req: AuthRequest, res: Response) => {
+  const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+
+  const grouped = await prisma.movementLog.groupBy({
+    by: ["assetId"],
+    _count: { assetId: true },
+    _max: { createdAt: true },
+    orderBy: { _count: { assetId: "desc" } },
+    take: limit,
+  });
+
+  const assets = await prisma.asset.findMany({
+    where: { id: { in: grouped.map((g) => g.assetId) } },
+    select: {
+      id: true, name: true, assetTag: true,
+      category: { select: { name: true } },
+      branch: { select: { name: true } },
+    },
+  });
+  const assetMap = new Map(assets.map((a) => [a.id, a]));
+
+  res.json({
+    assets: grouped.map((g) => {
+      const a = assetMap.get(g.assetId);
+      return {
+        assetId: g.assetId,
+        name: a?.name ?? "Unknown asset",
+        assetTag: a?.assetTag ?? null,
+        category: a?.category?.name ?? null,
+        branch: a?.branch?.name ?? null,
+        movements: g._count.assetId,
+        lastMovedAt: g._max.createdAt,
+      };
+    }),
   });
 });
 
