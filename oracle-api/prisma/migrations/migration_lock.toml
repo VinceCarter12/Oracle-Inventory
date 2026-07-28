@@ -1,0 +1,2 @@
+# Prisma migration history is the sole schema authority for Oracle Inventory.
+provider = "postgresql"
