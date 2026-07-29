@@ -34,6 +34,11 @@
     "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
+  "overrides": {
+    "node-html-parser": {
+      "entities": "4.5.0"
+    }
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
