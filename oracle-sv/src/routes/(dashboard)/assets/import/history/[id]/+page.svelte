@@ -89,7 +89,10 @@
   }
 
   async function downloadFailed() {
-    const res = await fetch(`/api/import/history/${$page.params.id}/failed`, {
+    const importId = $page.params.id;
+    if (!importId) return;
+
+    const res = await fetch(`/api/import/history/${importId}/failed`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
     const rows = await res.json();
@@ -106,7 +109,7 @@
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url;
-    a.download = `failed_rows_${$page.params.id.slice(0, 8)}.csv`;
+    a.download = `failed_rows_${importId.slice(0, 8)}.csv`;
     a.click(); URL.revokeObjectURL(url);
   }
 </script>

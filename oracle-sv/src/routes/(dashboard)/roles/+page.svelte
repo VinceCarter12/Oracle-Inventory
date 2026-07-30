@@ -6,7 +6,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
-  import { can } from '$lib/utils/permissions';
+  import { authStore } from '$lib/stores/auth.svelte';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import Modal from '$lib/components/Modal.svelte';
 
@@ -38,6 +38,11 @@
   let mPerms     = $state(new Set<string>());
   let mSaving    = $state(false);
   let mErr       = $state('');
+  const isSuperAdmin = $derived(
+    (typeof authStore.user?.role === 'string' ? authStore.user.role : (authStore.user?.role as any)?.name)
+      ?.trim()
+      .toLowerCase() === 'super_admin'
+  );
 
   // ── Delete confirmation ──────────────────────────────────────────────────────
   let delRole    = $state<RoleRow | null>(null);
@@ -80,10 +85,10 @@
       const permIds = [...mPerms];
       if (isEdit) {
         await api.put(`/api/roles/${editId}`, { name: mName.trim(), description: mDesc.trim() || null });
-        await api.put(`/api/roles/${editId}/permissions`, { permissionIds: permIds });
+        if (isSuperAdmin) await api.put(`/api/roles/${editId}/permissions`, { permissionIds: permIds });
       } else {
         const r = await api.post<RoleRow>('/api/roles', { name: mName.trim(), description: mDesc.trim() || null });
-        await api.put(`/api/roles/${r.id}/permissions`, { permissionIds: permIds });
+        if (isSuperAdmin) await api.put(`/api/roles/${r.id}/permissions`, { permissionIds: permIds });
       }
       modalOpen = false;
       await load();
@@ -119,7 +124,7 @@
       <h1 class="page-title">Roles</h1>
       <p class="page-sub">Manage access roles and their permissions</p>
     </div>
-    {#if can('assign_roles')}
+    {#if isSuperAdmin}
       <button class="btn-primary" onclick={openCreate}>+ New Role</button>
     {/if}
   </div>
@@ -148,7 +153,7 @@
                 <div class="role-desc">{role.description}</div>
               {/if}
             </div>
-            {#if can('assign_roles')}
+            {#if isSuperAdmin}
               <div class="role-actions">
                 <button class="action-btn" onclick={() => openEdit(role)} title="Edit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -201,6 +206,7 @@
 
   <div class="field">
     <span class="field-label">Permissions</span>
+    {#if isSuperAdmin}
     <div class="perm-list">
       {#each allPerms as perm}
         <label class="perm-row">
@@ -212,6 +218,9 @@
         </label>
       {/each}
     </div>
+    {:else}
+      <p class="field-label">Permission changes require Super Admin.</p>
+    {/if}
   </div>
 
   {#if mErr}<div class="modal-err">{mErr}</div>{/if}
@@ -225,7 +234,7 @@
 </Modal>
 
 <!-- ── Delete confirmation ────────────────────────────────────────────────── -->
-<Modal bind:open={!!delRole} title="Delete role?" maxWidth="380px" onclose={() => delRole = null}>
+<Modal open={delRole !== null} title="Delete role?" maxWidth="380px" onclose={() => delRole = null}>
   <p class="confirm-text">
     Delete <strong>{delRole?.name}</strong>? This removes the role from all
     {delRole?._count.users} user{(delRole?._count.users ?? 0) !== 1 ? 's' : ''} assigned to it.

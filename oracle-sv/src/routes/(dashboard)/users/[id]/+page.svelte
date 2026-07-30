@@ -37,6 +37,8 @@
 
   const userId = $derived($page.params.id);
   const isSelf = $derived(authStore.user?.id === userId);
+  const isSuperAdminUser = $derived(user?.role?.name?.trim().toLowerCase() === 'super_admin');
+  const isCurrentSuperAdmin = $derived((typeof authStore.user?.role === 'string' ? authStore.user.role : (authStore.user?.role as any)?.name)?.trim().toLowerCase() === 'super_admin');
 
   // ── Edit state ───────────────────────────────────────────────────────────────
 
@@ -242,7 +244,7 @@
         <label class="field-label">Role</label>
         <select class="field-input" bind:value={selectedRoleId}>
           <option value="">— No role —</option>
-          {#each roles as r}
+          {#each roles.filter((r) => r.name.trim().toLowerCase() !== 'super_admin') as r}
             <option value={r.id}>{r.name}</option>
           {/each}
         </select>
@@ -319,19 +321,19 @@
       <span class="bc-cur">{user.name}</span>
     </nav>
     <div class="top-actions">
-      {#if can('manage_users') && !isSelf}
+      {#if can('manage_users') && !isSelf && !isSuperAdminUser}
         <button class="btn-ghost btn-ghost-warn" onclick={() => showConfirmDelete = true}>Delete</button>
         <button class="btn-ghost" onclick={toggleStatus}>
           {user.status === 'active' ? 'Disable' : 'Enable'}
         </button>
       {/if}
-      {#if can('assign_roles')}
+      {#if isCurrentSuperAdmin && !isSuperAdminUser}
         <button class="btn-ghost" onclick={() => { selectedRoleId = user?.roleId ?? ''; showAssignRole = true; }}>Assign Role</button>
       {/if}
-      {#if can('manage_users')}
+      {#if can('manage_users') && !isSuperAdminUser}
         <button class="btn-ghost" onclick={() => showResetPw = true}>Reset Password</button>
       {/if}
-      {#if can('manage_users') || isSelf}
+      {#if (can('manage_users') && !isSuperAdminUser) || isSelf && !isSuperAdminUser}
         <button class="btn-primary" onclick={startEdit}>Edit</button>
       {/if}
     </div>

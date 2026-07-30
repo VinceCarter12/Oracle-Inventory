@@ -58,17 +58,21 @@ router.post("/login", loginLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Build effective permission set: role perms + overrides
-  const rolePerms = user.role?.permissions.map((rp) => rp.permission.key) ?? [];
-  const grantedOverrides = user.permissionOverrides
-    .filter((up) => up.granted)
-    .map((up) => up.permission.key);
-  const revokedOverrides = new Set(
-    user.permissionOverrides.filter((up) => !up.granted).map((up) => up.permission.key)
-  );
-  const permissions = [...new Set([...rolePerms, ...grantedOverrides])].filter(
-    (k) => !revokedOverrides.has(k)
-  );
+  // Super Admin is a protected system role: it always resolves to every
+  // permission and ignores mutable per-user overrides.
+  const isSuperAdmin = user.role?.name?.trim().toLowerCase() === "super_admin";
+  const permissions = isSuperAdmin
+    ? (await prisma.permission.findMany({ select: { key: true } })).map((permission) => permission.key)
+    : (() => {
+        const rolePerms = user.role?.permissions.map((rp) => rp.permission.key) ?? [];
+        const grantedOverrides = user.permissionOverrides
+          .filter((up) => up.granted)
+          .map((up) => up.permission.key);
+        const revokedOverrides = new Set(
+          user.permissionOverrides.filter((up) => !up.granted).map((up) => up.permission.key)
+        );
+        return [...new Set([...rolePerms, ...grantedOverrides])].filter((key) => !revokedOverrides.has(key));
+      })();
 
   const token = jwt.sign(
     { id: user.id, email: user.email, name: user.name },

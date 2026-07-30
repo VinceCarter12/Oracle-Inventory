@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
-import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
+import { requireAuth, requirePermission, requireSuperAdmin, AuthRequest } from "../middleware/auth";
 import { logActivity } from "../lib/activity";
 import { verifyOtp } from "../lib/otp";
 import { validateCorporateEmail, normaliseEmail } from "../lib/email";
@@ -16,6 +16,11 @@ const userSelect = {
   role:   { select: { id: true, name: true } },
   branch: { select: { id: true, name: true } },
 };
+
+async function isProtectedUser(id: string) {
+  const user = await prisma.systemUser.findUnique({ where: { id }, include: { role: { select: { name: true } } } });
+  return !!user && user.role?.name?.trim().toLowerCase() === "super_admin";
+}
 
 // GET /api/users
 router.get("/", requirePermission("manage_users"), async (_req, res: Response) => {
@@ -42,7 +47,7 @@ router.post("/", requirePermission("manage_users"), async (req: AuthRequest, res
   // Block Super Admin assignment via user creation
   if (roleId) {
     const role = await prisma.role.findUnique({ where: { id: roleId } });
-    if (role && role.name.toLowerCase() === "super_admin") {
+    if (role && role.name.trim().toLowerCase() === "super_admin") {
       res.status(403).json({ error: "Super Admin role cannot be assigned through user creation." });
       return;
     }
@@ -165,6 +170,7 @@ router.put("/:id", requirePermission("manage_users"), async (req: AuthRequest, r
   const normEmail2 = normaliseEmail(email);
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
 
   if (normEmail2 !== existing.email.toLowerCase()) {
     const taken = await prisma.systemUser.findUnique({ where: { email: normEmail2 } });
@@ -190,6 +196,7 @@ router.patch("/:id/status", requirePermission("manage_users"), async (req: AuthR
   }
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
   if (existing.id === req.user!.id) { res.status(400).json({ error: "Cannot change your own status." }); return; }
 
   const user = await prisma.systemUser.update({
@@ -202,10 +209,20 @@ router.patch("/:id/status", requirePermission("manage_users"), async (req: AuthR
 });
 
 // PUT /api/users/:id/role
-router.put("/:id/role", requirePermission("assign_roles"), async (req: AuthRequest, res: Response) => {
+router.put("/:id/role", requireSuperAdmin, async (req: AuthRequest, res: Response) => {
   const { roleId } = req.body as { roleId?: string | null };
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
+
+  if (roleId) {
+    const targetRole = await prisma.role.findUnique({ where: { id: roleId } });
+    if (!targetRole) { res.status(400).json({ error: "Role not found." }); return; }
+    if (targetRole.name.trim().toLowerCase() === "super_admin") {
+      res.status(403).json({ error: "Super Admin role cannot be assigned through normal user management." });
+      return;
+    }
+  }
 
   const user = await prisma.systemUser.update({
     where: { id: req.params.id },
@@ -225,6 +242,7 @@ router.put("/:id/reset-password", requirePermission("manage_users"), async (req:
   }
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
 
   const hashed = await bcrypt.hash(newPassword, 10);
   await prisma.systemUser.update({ where: { id: req.params.id }, data: { password: hashed } });
@@ -233,7 +251,8 @@ router.put("/:id/reset-password", requirePermission("manage_users"), async (req:
 });
 
 // GET /api/users/:id/permissions — get per-user permission overrides
-router.get("/:id/permissions", requirePermission("assign_roles"), async (req: AuthRequest, res: Response) => {
+router.get("/:id/permissions", requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+  if (await isProtectedUser(req.params.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
   const overrides = await prisma.userPermission.findMany({
     where: { userId: req.params.id },
     include: { permission: { select: { id: true, key: true, description: true } } },
@@ -243,7 +262,7 @@ router.get("/:id/permissions", requirePermission("assign_roles"), async (req: Au
 
 // PUT /api/users/:id/permissions — replace per-user permission overrides
 // Body: { grants: string[], revokes: string[] } — arrays of permissionId
-router.put("/:id/permissions", requirePermission("assign_roles"), async (req: AuthRequest, res: Response) => {
+router.put("/:id/permissions", requireSuperAdmin, async (req: AuthRequest, res: Response) => {
   const { grants, revokes } = req.body as { grants?: unknown; revokes?: unknown };
   if (!Array.isArray(grants) || !Array.isArray(revokes)) {
     res.status(400).json({ error: "grants and revokes must be arrays of permissionId" });
@@ -254,6 +273,7 @@ router.put("/:id/permissions", requirePermission("assign_roles"), async (req: Au
 
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
 
   await prisma.$transaction([
     prisma.userPermission.deleteMany({ where: { userId: req.params.id } }),
@@ -274,6 +294,7 @@ router.put("/:id/permissions", requirePermission("assign_roles"), async (req: Au
 router.delete("/:id", requirePermission("manage_users"), async (req: AuthRequest, res: Response) => {
   const existing = await prisma.systemUser.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (await isProtectedUser(existing.id)) { res.status(403).json({ error: "Super Admin users are protected." }); return; }
   if (existing.id === req.user!.id) { res.status(400).json({ error: "Cannot delete your own account." }); return; }
 
   await prisma.systemUser.delete({ where: { id: req.params.id } });

@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -91,20 +90,6 @@ async function main() {
   console.log("✓ Role permissions assigned");
 
   // ─── System Users ──────────────────────────────────────────────────────────
-  const hashPw = async (pw: string) => bcrypt.hash(pw, 10);
-
-  await prisma.systemUser.upsert({
-    where:  { email: "jay@oraclepetroleum.net" },
-    update: { roleId: "role-super-admin", status: "active" },
-    create: {
-      name: "Sir Jay", email: "jay@oraclepetroleum.net",
-      password: await hashPw("Jay@Oracle2026"),
-      roleId: "role-super-admin", status: "active",
-      position: "IT Director",
-    },
-  });
-  console.log("✓ SystemUsers: Sir Jay (super_admin)");
-
   // ─── Branches ──────────────────────────────────────────────────────────────
   const branches = [
     { id: "branch-cubao",   name: "Cubao",   address: "Cubao, Quezon City" },
