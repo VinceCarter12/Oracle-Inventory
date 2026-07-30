@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 export interface AuthRequest extends Request {
   user?: { id: string; email: string; name: string };
   permissions?: string[];
+  isSuperAdmin?: boolean;
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -42,6 +43,9 @@ export function requirePermission(key: string) {
       });
       if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
+      const isSuperAdmin = user.role?.name?.trim().toLowerCase() === "super_admin";
+      req.isSuperAdmin = isSuperAdmin;
+      if (isSuperAdmin) { next(); return; }
       const rolePerms = user.role?.permissions.map((rp) => rp.permission.key) ?? [];
       const granted = user.permissionOverrides.filter((up) => up.granted).map((up) => up.permission.key);
       const revoked = new Set(user.permissionOverrides.filter((up) => !up.granted).map((up) => up.permission.key));
@@ -54,4 +58,13 @@ export function requirePermission(key: string) {
     }
     next();
   };
+}
+
+export async function requireSuperAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const user = await prisma.systemUser.findUnique({ where: { id: req.user.id }, include: { role: true } });
+  if (!user) { res.status(401).json({ error: "User not found" }); return; }
+  req.isSuperAdmin = user.role?.name?.trim().toLowerCase() === "super_admin";
+  if (!req.isSuperAdmin) { res.status(403).json({ error: "Only a Super Admin can perform this action." }); return; }
+  next();
 }

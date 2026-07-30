@@ -176,7 +176,7 @@
         <label class="field-label">Role</label>
         <select class="field-input" bind:value={form.roleId}>
           <option value="">— No role —</option>
-          {#each roles.filter((r) => r.name !== 'super_admin') as r}
+          {#each roles.filter((r) => r.name.trim().toLowerCase() !== 'super_admin') as r}
             <option value={r.id}>{r.name}</option>
           {/each}
         </select>
