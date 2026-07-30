@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { Router } from "express";
 import { prisma } from "./lib/prisma";
 import authRoutes from "./routes/auth";
 import assetsRoutes from "./routes/assets";
@@ -51,22 +52,31 @@ app.get("/ready", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ready" }); }
   catch { res.status(503).json({ status: "not_ready" }); }
 });
-app.use("/api/auth", authRoutes);
-app.use("/api/assets", assetsRoutes);
-app.use("/api/lookup", lookupRoutes);
-app.use("/api/employees", employeesRoutes);
-app.use("/api/branches", branchesRoutes);
-app.use("/api/assignments", assignmentsRoutes);
-app.use("/api/reports", reportsRoutes);
-app.use("/api/turnover", turnoverRoutes);
-app.use("/api/users", usersRoutes);
-app.use("/api/roles", rolesRoutes);
-app.use("/api/activity", activityRoutes);
-app.use("/api/categories", categoriesRoutes);
-app.use("/api/departments", departmentsRoutes);
-app.use("/api/import", importRoutes);
-app.use("/api/maintenance", maintenanceRoutes);
-app.use("/api/scan", scanRoutes);
-app.use("/api/hardware-audit", hardwareAuditRoutes);
+
+const apiRouter = Router();
+apiRouter.use("/auth", authRoutes);
+apiRouter.use("/assets", assetsRoutes);
+apiRouter.use("/lookup", lookupRoutes);
+apiRouter.use("/employees", employeesRoutes);
+apiRouter.use("/branches", branchesRoutes);
+apiRouter.use("/assignments", assignmentsRoutes);
+apiRouter.use("/reports", reportsRoutes);
+apiRouter.use("/turnover", turnoverRoutes);
+apiRouter.use("/users", usersRoutes);
+apiRouter.use("/roles", rolesRoutes);
+apiRouter.use("/activity", activityRoutes);
+apiRouter.use("/categories", categoriesRoutes);
+apiRouter.use("/departments", departmentsRoutes);
+apiRouter.use("/import", importRoutes);
+apiRouter.use("/maintenance", maintenanceRoutes);
+apiRouter.use("/scan", scanRoutes);
+apiRouter.use("/hardware-audit", hardwareAuditRoutes);
+
+app.use("/api", apiRouter);
+
+// Vercel's file-system router intercepts nested paths beginning with `/api/`
+// before the Express catch-all receives them. The frontend keeps its public
+// `/api/*` contract and proxies it to this internal, Vercel-safe gateway.
+app.use("/gateway", apiRouter);
 
 export default app;
