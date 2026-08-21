@@ -50,7 +50,25 @@ app.use(express.json());
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/ready", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ready" }); }
-  catch { res.status(503).json({ status: "not_ready" }); }
+  catch (error) {
+  const databaseError = error as { name?: unknown; code?: unknown; message?: unknown };
+  const rawMessage =
+    typeof databaseError.message === "string"
+      ? databaseError.message
+      : "No error message";
+  const safeMessage = rawMessage.replace(
+    /postgres(?:ql)?:\/\/\S+/gi,
+    "[REDACTED_DATABASE_URL]"
+  );
+
+  console.error("Database readiness check failed", {
+    name: databaseError.name,
+    code: databaseError.code,
+    message: safeMessage
+  });
+
+  res.status(503).json({ status: "not_ready" });
+}
 });
 
 const apiRouter = Router();
