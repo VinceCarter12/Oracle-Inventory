@@ -19,6 +19,7 @@ import importRoutes from "./routes/import";
 import maintenanceRoutes from "./routes/maintenance";
 import scanRoutes from "./routes/scan";
 import hardwareAuditRoutes from "./routes/hardware-audit";
+import operationsRoutes from "./routes/operations";
 
 const app = express();
 const allowedOrigins = new Set(
@@ -89,6 +90,7 @@ apiRouter.use("/import", importRoutes);
 apiRouter.use("/maintenance", maintenanceRoutes);
 apiRouter.use("/scan", scanRoutes);
 apiRouter.use("/hardware-audit", hardwareAuditRoutes);
+apiRouter.use("/operations", operationsRoutes);
 
 app.use("/api", apiRouter);
 

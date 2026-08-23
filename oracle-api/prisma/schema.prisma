@@ -65,6 +65,8 @@ model SystemUser {
   branch              Branch?               @relation(fields: [branchId], references: [id])
   role                Role?                 @relation(fields: [roleId], references: [id])
   permissionOverrides UserPermission[]
+  rolloutChanges       FeatureRollout[]       @relation("FeatureRolloutUpdater")
+  rolloutBranchChanges FeatureRolloutBranch[] @relation("FeatureRolloutBranchUpdater")
 }
 
 model OtpCode {
@@ -101,6 +103,38 @@ model Branch {
   assets     Asset[]
   employees  Employee[]
   users      SystemUser[]
+  featureOverrides FeatureRolloutBranch[]
+}
+
+model FeatureRollout {
+  id              String                 @id @default(cuid())
+  key             String                 @unique
+  enabledGlobally Boolean                @default(false)
+  status          RolloutStatus          @default(disabled)
+  minimumRole     String?
+  configVersion   Int                    @default(1)
+  updatedById     String?
+  updatedAt       DateTime               @updatedAt
+  createdAt       DateTime               @default(now())
+  updatedBy       SystemUser?            @relation("FeatureRolloutUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  branchOverrides FeatureRolloutBranch[]
+}
+
+model FeatureRolloutBranch {
+  id          String         @id @default(cuid())
+  featureKey  String
+  branchId    String
+  enabled     Boolean
+  reason      String?
+  updatedById String?
+  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime       @default(now())
+  feature     FeatureRollout @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+  branch      Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  updatedBy   SystemUser?    @relation("FeatureRolloutBranchUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([featureKey, branchId])
+  @@index([branchId])
 }
 
 model Department {
@@ -417,4 +451,12 @@ enum ScanResultStatus {
   pending
   accepted
   rejected
+}
+
+enum RolloutStatus {
+  disabled
+  staged
+  pilot
+  enabled
+  paused
 }
