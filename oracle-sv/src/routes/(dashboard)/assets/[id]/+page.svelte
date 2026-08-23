@@ -28,6 +28,11 @@
       id: string; type: string; notes: string | null; createdAt: string;
       employee: { id: string; name: string } | null;
     }[];
+    deviceProfile: {
+      deviceType: 'computer' | 'laptop'; brand: string | null; model: string | null; deviceSerial: string | null;
+      processor: string | null; motherboard: string | null; operatingSystem: string | null; osVersion: string | null; osInstallDate: string | null;
+    } | null;
+    components: { id: string; type: 'ram' | 'storage'; slotOrBay: string | null; brand: string | null; model: string | null; serialNumber: string | null; capacity: string | null; storageKind: string | null }[];
   }
 
   interface Category { id: string; name: string; }
@@ -523,6 +528,23 @@
             {/if}
           </div>
         </div>
+
+        <!-- Recent Activity section -->
+        {#if asset.deviceProfile}
+          <div class="rp-section" aria-labelledby="computer-profile-title">
+            <div class="section-head"><span class="section-title" id="computer-profile-title">Computer profile</span><span class="badge badge-blue">Manual</span></div>
+            <div class="field-grid">
+              <div class="field"><span class="field-label">Device type</span><span class="field-value">{asset.deviceProfile.deviceType === 'laptop' ? 'Laptop' : 'Desktop'}</span></div>
+              <div class="field"><span class="field-label">Brand / model</span><span class="field-value">{[asset.deviceProfile.brand, asset.deviceProfile.model].filter(Boolean).join(' · ') || '—'}</span></div>
+              <div class="field"><span class="field-label">Device serial</span><span class="field-value mono">{asset.deviceProfile.deviceSerial ?? '—'}</span></div>
+              <div class="field"><span class="field-label">Processor</span><span class="field-value">{asset.deviceProfile.processor ?? '—'}</span></div>
+              <div class="field"><span class="field-label">Motherboard</span><span class="field-value">{asset.deviceProfile.motherboard ?? '—'}</span></div>
+              <div class="field"><span class="field-label">Operating system</span><span class="field-value">{[asset.deviceProfile.operatingSystem, asset.deviceProfile.osVersion].filter(Boolean).join(' · ') || '—'}</span></div>
+            </div>
+            <h3 class="subsection-title">RAM and storage</h3>
+            {#if asset.components.length === 0}<div class="act-empty">No component rows recorded.</div>{:else}<div class="component-list" aria-label="RAM and storage components">{#each asset.components as component}<div class="component-item"><strong>{component.type === 'ram' ? 'RAM' : 'Storage'}</strong><span>{[component.brand, component.model].filter(Boolean).join(' · ') || 'Unspecified'}</span><span>{component.capacity ?? 'Capacity not provided'}</span><span>{component.slotOrBay ?? '—'}</span></div>{/each}</div>{/if}
+          </div>
+        {/if}
 
         <!-- Recent Activity section -->
         <div class="rp-section">
@@ -1141,6 +1163,11 @@
   .field { display: flex; flex-direction: column; gap: 5px; }
 
   .field-wide { grid-column: span 2; }
+  .subsection-title { margin: 20px 0 10px; font-size: 12px; color: var(--body); }
+  .component-list { display: grid; gap: 8px; }
+  .component-item { display: grid; grid-template-columns: 80px 1.5fr 1fr 80px; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--hairline); border-radius: 7px; font-size: 12px; }
+  .component-item span { color: var(--body); }
+  @media (max-width: 760px) { .component-item { grid-template-columns: 1fr 1fr; } }
 
   .field-label {
     font-size: 10.5px;

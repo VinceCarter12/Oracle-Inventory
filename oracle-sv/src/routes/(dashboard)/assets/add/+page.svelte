@@ -127,6 +127,7 @@
       <h1 class="page-title">Add New Asset</h1>
       <p class="page-subtitle">Register a new asset into the inventory system</p>
     </div>
+    <a class="btn btn-ghost" href="/assets/add/computer">Computer / laptop Manual Mode</a>
     <div class="header-actions">
       <div class="header-left">
         <button type="button" class="btn btn-ghost" onclick={handleCancel}>Cancel</button>
