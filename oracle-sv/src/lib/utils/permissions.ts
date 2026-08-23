@@ -30,6 +30,8 @@ export const PERMISSIONS = [
   'assign_roles',
   'view_reports',
   'manage_stock',
+  'view_stock',
+  'approve_stock_adjustments',
   'approve_transactions',
   'access_logs',
   'manage_settings',

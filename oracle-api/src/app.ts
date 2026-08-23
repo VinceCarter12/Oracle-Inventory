@@ -21,6 +21,7 @@ import scanRoutes from "./routes/scan";
 import hardwareAuditRoutes from "./routes/hardware-audit";
 import operationsRoutes from "./routes/operations";
 import computerIntakeRoutes from "./routes/computer-intake";
+import stockRoutes from "./routes/stock";
 
 const app = express();
 const allowedOrigins = new Set(
@@ -43,7 +44,7 @@ app.use((req, res, next) => {
   if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,Idempotency-Key");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
@@ -93,6 +94,7 @@ apiRouter.use("/scan", scanRoutes);
 apiRouter.use("/hardware-audit", hardwareAuditRoutes);
 apiRouter.use("/operations", operationsRoutes);
 apiRouter.use("/computer-intake", computerIntakeRoutes);
+apiRouter.use("/stock", stockRoutes);
 
 app.use("/api", apiRouter);
 

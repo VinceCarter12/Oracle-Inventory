@@ -69,6 +69,10 @@ model SystemUser {
   reviewedObservations InventoryObservation[] @relation("InventoryObservationReviewer")
   rolloutChanges       FeatureRollout[]       @relation("FeatureRolloutUpdater")
   rolloutBranchChanges FeatureRolloutBranch[] @relation("FeatureRolloutBranchUpdater")
+  stockMovementsPerformed StockMovement[]     @relation("StockMovementPerformedBy")
+  stockMovementsApproved  StockMovement[]     @relation("StockMovementApprovedBy")
+  stockCountsStarted      StockCountSession[] @relation("StockCountStartedBy")
+  stockCountsApproved     StockCountSession[] @relation("StockCountApprovedBy")
 }
 
 model OtpCode {
@@ -107,6 +111,7 @@ model Branch {
   users      SystemUser[]
   intakeDrafts ComputerIntakeDraft[]
   featureOverrides FeatureRolloutBranch[]
+  stockLocations StockLocation[]
 }
 
 model FeatureRollout {
@@ -171,6 +176,7 @@ model Employee {
   branch       Branch?           @relation(fields: [branchId], references: [id])
   department   Department?       @relation(fields: [departmentId], references: [id])
   movementLogs MovementLog[]
+  stockMovements StockMovement[]
 }
 
 model Asset {
@@ -208,6 +214,7 @@ model Asset {
   deviceProfile       DeviceProfile?
   components          AssetComponent[]
   observations        InventoryObservation[]
+  stockMovements      StockMovement[]
 }
 
 model DeviceProfile {
@@ -500,6 +507,152 @@ enum AssignmentStatus {
   returned
   transferred
   pending_return
+}
+
+model StockItem {
+  id            String             @id @default(cuid())
+  sku           String             @unique
+  idempotencyKey String              @unique
+  requestFingerprint String
+  name          String
+  category      String
+  unitOfMeasure String
+  description   String?
+  isSerialized  Boolean            @default(false)
+  active        Boolean            @default(true)
+  archivedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  movements     StockMovement[]
+  policies      StockLevelPolicy[]
+  countLines    StockCountLine[]
+}
+
+model StockLocation {
+  id            String              @id @default(cuid())
+  branchId      String
+  name          String
+  locationType  StockLocationType
+  description   String?
+  archivedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  movements     StockLedgerEntry[]
+  policies      StockLevelPolicy[]
+  countSessions StockCountSession[]
+  branch        Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, archivedAt])
+}
+
+model StockMovement {
+  id                String            @id @default(cuid())
+  stockItemId       String
+  movementType      StockMovementType
+  quantity          Decimal           @db.Decimal(18, 3)
+  reason            String?
+  referenceType     String?
+  referenceId       String?
+  idempotencyKey    String            @unique
+  requestFingerprint String
+  performedById     String
+  approvedById      String?
+  approvedAt        DateTime?
+  relatedEmployeeId String?
+  relatedAssetId    String?
+  createdAt         DateTime          @default(now())
+  stockItem         StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  entries           StockLedgerEntry[]
+  performedBy       SystemUser        @relation("StockMovementPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  approvedBy        SystemUser?       @relation("StockMovementApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  relatedEmployee   Employee?         @relation(fields: [relatedEmployeeId], references: [id], onDelete: SetNull)
+  relatedAsset      Asset?            @relation(fields: [relatedAssetId], references: [id], onDelete: SetNull)
+
+  @@index([stockItemId, createdAt])
+}
+
+model StockLedgerEntry {
+  id            String        @id @default(cuid())
+  movementId    String
+  locationId    String
+  quantityDelta Decimal       @db.Decimal(18, 3)
+  createdAt     DateTime      @default(now())
+  movement      StockMovement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+  location      StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([locationId, createdAt])
+}
+
+model StockLevelPolicy {
+  id              String        @id @default(cuid())
+  stockItemId     String
+  locationId      String
+  minimumQuantity Decimal       @db.Decimal(18, 3)
+  reorderQuantity Decimal       @db.Decimal(18, 3)
+  updatedAt       DateTime      @updatedAt
+  stockItem       StockItem     @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  location        StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([stockItemId, locationId])
+}
+
+model StockCountSession {
+  id                        String           @id @default(cuid())
+  locationId                String
+  status                    StockCountStatus @default(draft)
+  startedById               String
+  submittedAt               DateTime?
+  approvedById              String?
+  approvedAt                DateTime?
+  expectedUpdatedAt         DateTime         @updatedAt
+  idempotencyKey            String           @unique
+  approvalIdempotencyKey    String?          @unique
+  approvalReason            String?
+  approvalExpectedUpdatedAt DateTime?
+  location                  StockLocation    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines                     StockCountLine[]
+  startedBy                 SystemUser       @relation("StockCountStartedBy", fields: [startedById], references: [id], onDelete: Restrict)
+  approvedBy                SystemUser?      @relation("StockCountApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+}
+
+model StockCountLine {
+  id                       String            @id @default(cuid())
+  sessionId                String
+  stockItemId              String
+  expectedQuantitySnapshot Decimal           @db.Decimal(18, 3)
+  countedQuantity          Decimal           @db.Decimal(18, 3)
+  variance                 Decimal           @db.Decimal(18, 3)
+  session                  StockCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  stockItem                StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, stockItemId])
+}
+
+enum StockLocationType {
+  room
+  cabinet
+  vehicle
+  employee_custody
+  other
+}
+
+enum StockMovementType {
+  receive
+  issue
+  transfer
+  adjustment
+  count_correction
+  consume
+  return
+  opening
+}
+
+enum StockCountStatus {
+  draft
+  submitted
+  approved
+  rejected
+  cancelled
 }
 
 enum AssetStatus {
