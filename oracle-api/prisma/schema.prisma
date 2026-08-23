@@ -112,6 +112,8 @@ model Branch {
   intakeDrafts ComputerIntakeDraft[]
   featureOverrides FeatureRolloutBranch[]
   stockLocations StockLocation[]
+  vlans            Vlan[]
+  portConnections  PortConnection[]
 }
 
 model FeatureRollout {
@@ -218,6 +220,8 @@ model Asset {
   cameraProfile       CameraProfile?
   recorderProfile     RecorderProfile?
   secretReferences    AssetSecretReference[] @relation("AssetSecretReferences")
+  networkInterfaces   NetworkInterface[]
+  networkPorts        NetworkPort[]
 }
 
 model DeviceProfile {
@@ -297,6 +301,159 @@ model ComputerIntakeDraft {
 
   @@index([createdById, status])
   @@index([branchId, status])
+}
+
+model NetworkInterface {
+  id                     String                    @id @default(cuid())
+  assetId                String
+  interfaceName          String
+  macAddress             String?
+  description            String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  asset                  Asset                     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  ipObservations         IpAddressObservation[]
+  vlanAssignments        InterfaceVlanAssignment[]
+  portConnections        PortConnection[]          @relation("InterfaceConnections")
+
+  @@unique([assetId, interfaceName])
+  @@unique([idempotencyKey])
+  @@index([macAddress])
+}
+
+model IpAddressObservation {
+  id                     String           @id @default(cuid())
+  interfaceId            String
+  address                String
+  prefixLength           Int
+  family                 IpAddressFamily
+  addressingMode         AddressingMode
+  gateway                String?
+  dnsServers             String[]
+  source                 String
+  observedAt             DateTime         @default(now())
+  validFrom              DateTime         @default(now())
+  validTo                DateTime?
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  interface              NetworkInterface @relation(fields: [interfaceId], references: [id], onDelete: Cascade)
+
+  @@unique([idempotencyKey])
+  @@index([interfaceId, observedAt])
+  @@index([address])
+}
+
+model Vlan {
+  id                     String                    @id @default(cuid())
+  branchId               String
+  vlanNumber             Int
+  vlanName               String?
+  cidr                   String?
+  gateway                String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  branch                 Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  assignments            InterfaceVlanAssignment[]
+
+  @@unique([branchId, vlanNumber])
+  @@unique([idempotencyKey])
+}
+
+model InterfaceVlanAssignment {
+  id                     String           @id @default(cuid())
+  interfaceId            String
+  vlanId                 String
+  taggingMode            VlanTaggingMode
+  isNative               Boolean          @default(false)
+  effectiveFrom          DateTime         @default(now())
+  effectiveTo            DateTime?
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  interface              NetworkInterface @relation(fields: [interfaceId], references: [id], onDelete: Cascade)
+  vlan                   Vlan             @relation(fields: [vlanId], references: [id], onDelete: Cascade)
+
+  @@unique([idempotencyKey])
+  @@index([interfaceId, effectiveFrom])
+  @@index([vlanId, effectiveFrom])
+}
+
+model NetworkPort {
+  id                     String            @id @default(cuid())
+  assetId                String
+  portNumber             String
+  portLabel              String?
+  medium                 String?
+  speedMbps              Int?
+  poeCapability          String?
+  adminStatus            PortStatus        @default(unknown)
+  operationalStatus      PortStatus        @default(unknown)
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  asset                  Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fromConnections        PortConnection[]  @relation("FromPort")
+  toConnections          PortConnection[]  @relation("ToPort")
+
+  @@unique([assetId, portNumber])
+  @@unique([idempotencyKey])
+}
+
+model PortConnection {
+  id                     String            @id @default(cuid())
+  fromPortId             String
+  toPortId               String?
+  toInterfaceId          String?
+  branchId               String
+  linkType               LinkType
+  effectiveFrom          DateTime          @default(now())
+  effectiveTo            DateTime?
+  createdAt              DateTime          @default(now())
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
+  fromPort               NetworkPort       @relation("FromPort", fields: [fromPortId], references: [id], onDelete: Cascade)
+  toPort                 NetworkPort?      @relation("ToPort", fields: [toPortId], references: [id], onDelete: SetNull)
+  toInterface            NetworkInterface? @relation("InterfaceConnections", fields: [toInterfaceId], references: [id], onDelete: SetNull)
+  branch                 Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([idempotencyKey])
+  @@index([branchId, effectiveFrom])
+  @@index([fromPortId, effectiveTo])
+}
+
+enum IpAddressFamily {
+  ipv4
+  ipv6
+}
+
+enum AddressingMode {
+  static
+  dhcp
+  dynamic
+  unknown
+}
+
+enum VlanTaggingMode {
+  access
+  tagged
+  trunk
+}
+
+enum PortStatus {
+  up
+  down
+  disabled
+  unknown
+}
+
+enum LinkType {
+  physical
+  logical
+  wan
 }
 
 enum DeviceType {

@@ -24,6 +24,8 @@ import computerIntakeRoutes from "./routes/computer-intake";
 import stockRoutes from "./routes/stock";
 import cctvRoutes from "./routes/cctv";
 import secretReferenceRoutes from "./routes/secret-reference";
+import networkRoutes from "./routes/network";
+import networkMutationRoutes from "./routes/network-mutations";
 
 const app = express();
 const allowedOrigins = new Set(
@@ -99,6 +101,8 @@ apiRouter.use("/computer-intake", computerIntakeRoutes);
 apiRouter.use("/stock", stockRoutes);
 apiRouter.use("/cctv", cctvRoutes);
 apiRouter.use("/secret-references", secretReferenceRoutes);
+apiRouter.use("/network", networkMutationRoutes);
+apiRouter.use("/network", networkRoutes);
 
 app.use("/api", apiRouter);
 
