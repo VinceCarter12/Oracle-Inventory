@@ -17,33 +17,40 @@ const include = {
     orderBy: { createdAt: "desc" as const },
     include: { employee: { select: { id: true, name: true } } },
   },
+  deviceProfile: true,
+  components: true,
 };
+async function scopedAssetWhere(req: AuthRequest) {
+  const user = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } });
+  return user?.role?.name?.trim().toLowerCase() === "super_admin" ? {} : { branchId: user?.branchId ?? "__no_branch__" };
+}
 
 // GET /api/assets/stats — must be before /:id
-router.get("/stats", requirePermission("view_inventory"), async (_req: AuthRequest, res: Response) => {
+router.get("/stats", requirePermission("view_inventory"), async (req: AuthRequest, res: Response) => {
+  const scope = await scopedAssetWhere(req);
   const [total, assigned, forRepair, forDisposal, lost, stolen, available] = await Promise.all([
-    prisma.asset.count(),
-    prisma.assetAssignment.count({ where: { status: "active" } }),
-    prisma.asset.count({ where: { condition: "for_repair" } }),
-    prisma.asset.count({ where: { condition: "for_disposal" } }),
-    prisma.asset.count({ where: { status: "lost" } }),
-    prisma.asset.count({ where: { status: "stolen" } }),
+    prisma.asset.count({ where: scope }),
+    prisma.assetAssignment.count({ where: { status: "active", asset: scope } }),
+    prisma.asset.count({ where: { ...scope, condition: "for_repair" } }),
+    prisma.asset.count({ where: { ...scope, condition: "for_disposal" } }),
+    prisma.asset.count({ where: { ...scope, status: "lost" } }),
+    prisma.asset.count({ where: { ...scope, status: "stolen" } }),
     prisma.asset.count({
-      where: { status: "active", condition: "usable", assignments: { none: { status: "active" } } },
+      where: { ...scope, status: "active", condition: "usable", assignments: { none: { status: "active" } } },
     }),
   ]);
   res.json({ total, assigned, available, forRepair, forDisposal, lost, stolen });
 });
 
 // GET /api/assets
-router.get("/", requirePermission("view_inventory"), async (_req: AuthRequest, res: Response) => {
-  const assets = await prisma.asset.findMany({ include, orderBy: { createdAt: "desc" } });
+router.get("/", requirePermission("view_inventory"), async (req: AuthRequest, res: Response) => {
+  const assets = await prisma.asset.findMany({ where: await scopedAssetWhere(req), include, orderBy: { createdAt: "desc" } });
   res.json(assets);
 });
 
 // GET /api/assets/:id
 router.get("/:id", requirePermission("view_inventory"), async (req: AuthRequest, res: Response) => {
-  const asset = await prisma.asset.findUnique({ where: { id: req.params.id }, include });
+  const asset = await prisma.asset.findFirst({ where: { id: req.params.id, ...(await scopedAssetWhere(req)) }, include });
   if (!asset) { res.status(404).json({ error: "Asset not found" }); return; }
   res.json(asset);
 });

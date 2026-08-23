@@ -65,6 +65,10 @@ model SystemUser {
   branch              Branch?               @relation(fields: [branchId], references: [id])
   role                Role?                 @relation(fields: [roleId], references: [id])
   permissionOverrides UserPermission[]
+  intakeDrafts        ComputerIntakeDraft[]
+  reviewedObservations InventoryObservation[] @relation("InventoryObservationReviewer")
+  rolloutChanges       FeatureRollout[]       @relation("FeatureRolloutUpdater")
+  rolloutBranchChanges FeatureRolloutBranch[] @relation("FeatureRolloutBranchUpdater")
 }
 
 model OtpCode {
@@ -101,6 +105,39 @@ model Branch {
   assets     Asset[]
   employees  Employee[]
   users      SystemUser[]
+  intakeDrafts ComputerIntakeDraft[]
+  featureOverrides FeatureRolloutBranch[]
+}
+
+model FeatureRollout {
+  id              String                 @id @default(cuid())
+  key             String                 @unique
+  enabledGlobally Boolean                @default(false)
+  status          RolloutStatus          @default(disabled)
+  minimumRole     String?
+  configVersion   Int                    @default(1)
+  updatedById     String?
+  updatedAt       DateTime               @updatedAt
+  createdAt       DateTime               @default(now())
+  updatedBy       SystemUser?            @relation("FeatureRolloutUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  branchOverrides FeatureRolloutBranch[]
+}
+
+model FeatureRolloutBranch {
+  id          String         @id @default(cuid())
+  featureKey  String
+  branchId    String
+  enabled     Boolean
+  reason      String?
+  updatedById String?
+  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime       @default(now())
+  feature     FeatureRollout @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+  branch      Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  updatedBy   SystemUser?    @relation("FeatureRolloutBranchUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([featureKey, branchId])
+  @@index([branchId])
 }
 
 model Department {
@@ -161,12 +198,118 @@ model Asset {
   status              AssetStatus       @default(active)
   notifiedDue         DateTime?
   notifiedReminder    DateTime?
+  purchaseDate        DateTime?
   branch              Branch?           @relation(fields: [branchId], references: [id])
   category            Category?         @relation(fields: [categoryId], references: [id])
   importHistory       ImportHistory?    @relation(fields: [importId], references: [id])
   assignments         AssetAssignment[]
   movementLogs        MovementLog[]
   hardwareScans       HardwareScan[]
+  deviceProfile       DeviceProfile?
+  components          AssetComponent[]
+  observations        InventoryObservation[]
+}
+
+model DeviceProfile {
+  id               String     @id @default(cuid())
+  assetId          String     @unique
+  deviceType       DeviceType @default(computer)
+  brand            String?
+  model            String?
+  deviceSerial     String?
+  processor        String?
+  motherboard      String?
+  operatingSystem  String?
+  osVersion        String?
+  osInstallDate    DateTime?
+  source           String     @default("manual")
+  sourceObservedAt DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  asset            Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  components       AssetComponent[]
+
+  @@index([deviceType])
+}
+
+model AssetComponent {
+  id               String         @id @default(cuid())
+  assetId          String
+  deviceProfileId  String?
+  type             ComponentType
+  slotOrBay        String?
+  brand            String?
+  model            String?
+  serialNumber     String?
+  capacity         String?
+  storageKind      String?
+  source           String         @default("manual")
+  sourceObservedAt DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  asset            Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  deviceProfile    DeviceProfile? @relation(fields: [deviceProfileId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, type])
+}
+
+model InventoryObservation {
+  id           String            @id @default(cuid())
+  assetId      String
+  source       String
+  status       ObservationStatus @default(proposed)
+  fields       Json
+  observedAt   DateTime          @default(now())
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+  createdAt    DateTime          @default(now())
+  asset        Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reviewedBy   SystemUser?       @relation("InventoryObservationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([assetId, status])
+}
+
+model ComputerIntakeDraft {
+  id          String      @id @default(cuid())
+  createdById String
+  branchId    String?
+  status      DraftStatus @default(draft)
+  data        Json
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  submittedAt DateTime?
+  submittedAssetId String?
+  submitIdempotencyKey String? @unique
+  submitPayloadHash String?
+  createdBy   SystemUser  @relation(fields: [createdById], references: [id])
+  branch      Branch?     @relation(fields: [branchId], references: [id])
+
+  @@index([createdById, status])
+  @@index([branchId, status])
+}
+
+enum DeviceType {
+  computer
+  laptop
+}
+
+enum ComponentType {
+  ram
+  storage
+}
+
+enum ObservationStatus {
+  proposed
+  verified
+  conflict
+  rejected
+}
+
+enum DraftStatus {
+  draft
+  submitted
+  cancelled
 }
 
 model HardwareScan {
@@ -417,4 +560,12 @@ enum ScanResultStatus {
   pending
   accepted
   rejected
+}
+
+enum RolloutStatus {
+  disabled
+  staged
+  pilot
+  enabled
+  paused
 }
