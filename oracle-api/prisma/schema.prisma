@@ -215,6 +215,9 @@ model Asset {
   components          AssetComponent[]
   observations        InventoryObservation[]
   stockMovements      StockMovement[]
+  cameraProfile       CameraProfile?
+  recorderProfile     RecorderProfile?
+  secretReferences    AssetSecretReference[] @relation("AssetSecretReferences")
 }
 
 model DeviceProfile {
@@ -721,4 +724,129 @@ enum RolloutStatus {
   pilot
   enabled
   paused
+}
+
+// --- Phase 4: CCTV / NVR inventory foundation ---
+// Metadata only. Never stores camera/NVR passwords, stream URLs, footage, or
+// exported device configuration. CameraProfile/RecorderChannel intentionally
+// omit a network-interface/port linkage in this isolated branch because that
+// linkage depends on NetworkInterface/NetworkPort models owned by an
+// unmerged networking phase; add it back once that phase lands on main.
+
+model CameraProfile {
+  id                     String                    @id @default(cuid())
+  assetId                String                    @unique
+  physicalLocation       String
+  coverageArea           String?
+  cameraType             CameraType                @default(fixed)
+  resolution             String?
+  nightVision            Boolean?
+  motionDetection        Boolean?
+  installationDate       DateTime?
+  notes                  String?
+  idempotencyKey         String?                   @unique
+  idempotencyPayloadHash String?
+  secretReferences       AssetSecretReference[]    @relation("CameraSecretReferences")
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  asset                  Asset                     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assignments            CameraChannelAssignment[]
+
+  @@index([physicalLocation])
+}
+
+model RecorderProfile {
+  id                     String            @id @default(cuid())
+  assetId                String            @unique
+  recorderType           RecorderType      @default(nvr)
+  channelCapacity        Int
+  physicalLocation       String
+  storageCapacityBytes   BigInt?
+  retentionDaysTarget    Int?
+  notes                  String?
+  idempotencyKey         String?           @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  asset                  Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  channels               RecorderChannel[]
+
+  @@index([physicalLocation])
+}
+
+model RecorderChannel {
+  id            String                    @id @default(cuid())
+  recorderId    String
+  channelNumber Int
+  label         String?
+  enabled       Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  recorder      RecorderProfile           @relation(fields: [recorderId], references: [id], onDelete: Cascade)
+  assignments   CameraChannelAssignment[]
+
+  @@unique([recorderId, channelNumber])
+}
+
+model CameraChannelAssignment {
+  id                     String          @id @default(cuid())
+  cameraId               String
+  channelId              String
+  validFrom              DateTime        @default(now())
+  validTo                DateTime?
+  notes                  String?
+  idempotencyKey         String?         @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  camera                 CameraProfile   @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  channel                RecorderChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId, validFrom])
+  @@index([channelId, validFrom])
+}
+
+model SecretReference {
+  id           String                 @id @default(cuid())
+  provider     String
+  referenceId  String
+  displayLabel String?
+  system       String?
+  ownerTeam    String?
+  rotationAt   DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  assets       AssetSecretReference[] @relation("SecretReferenceLinks")
+
+  @@unique([provider, referenceId])
+}
+
+model AssetSecretReference {
+  id                String          @id @default(cuid())
+  assetId           String
+  secretReferenceId String
+  cameraProfileId   String?
+  createdAt         DateTime        @default(now())
+  asset             Asset           @relation("AssetSecretReferences", fields: [assetId], references: [id], onDelete: Cascade)
+  secretReference   SecretReference @relation("SecretReferenceLinks", fields: [secretReferenceId], references: [id], onDelete: Cascade)
+  cameraProfile     CameraProfile?  @relation("CameraSecretReferences", fields: [cameraProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, secretReferenceId, cameraProfileId])
+  @@index([secretReferenceId])
+}
+
+enum CameraType {
+  fixed
+  dome
+  bullet
+  ptz
+  thermal
+  other
+}
+
+enum RecorderType {
+  nvr
+  dvr
+  hybrid
+  other
 }

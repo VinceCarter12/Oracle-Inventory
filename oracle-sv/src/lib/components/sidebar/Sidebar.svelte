@@ -54,6 +54,8 @@
         { id: 'assignments', label: 'Assignments', icon: 'clipboard', href: '/assignments', permission: 'view_inventory' },
         { id: 'hardware-audit', label: 'Hardware Audit', icon: 'cpu', href: '/hardware-audit', permission: 'view_inventory' },
         { id: 'stock', label: 'Tools & Stock', icon: 'package', href: '/stock', permission: 'view_stock' },
+        { id: 'stock', label: 'Tools & Stock', icon: 'package', href: '/stock', permission: 'view_stock' },
+        { id: 'cctv', label: 'CCTV & NVR', icon: 'analytics', href: '/cctv', permission: 'view_inventory' },
       ],
     },
     {
