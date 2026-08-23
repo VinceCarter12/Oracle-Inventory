@@ -222,6 +222,7 @@ model Asset {
   secretReferences    AssetSecretReference[] @relation("AssetSecretReferences")
   networkInterfaces   NetworkInterface[]
   networkPorts        NetworkPort[]
+  proposals           InventoryFieldProposal[]
 }
 
 model DeviceProfile {
@@ -480,25 +481,61 @@ enum DraftStatus {
 }
 
 model HardwareScan {
-  id               String              @id @default(cuid())
-  assetId          String
-  submittedById    String
-  fileName         String
-  rawHtml          String
-  parsedSpecs      Json
-  isBaseline       Boolean             @default(false)
-  comparisonResult Json?
-  overallStatus    HwComparisonStatus?
-  status           HardwareScanStatus  @default(pending)
-  reviewedById     String?
-  reviewedAt       DateTime?
-  reviewNotes      String?
-  createdAt        DateTime            @default(now())
-  asset            Asset               @relation(fields: [assetId], references: [id])
-  submittedBy      SystemUser          @relation("HardwareScanSubmitter", fields: [submittedById], references: [id])
-  reviewedBy       SystemUser?         @relation("HardwareScanReviewer", fields: [reviewedById], references: [id])
+  id                String              @id @default(cuid())
+  assetId           String
+  submittedById     String
+  fileName          String
+  rawHtml           String
+  rawHtmlCiphertext String?
+  rawHtmlIv         String?
+  rawHtmlTag        String?
+  rawRetentionMode  String?
+  retentionUntil    DateTime?
+  purgedAt          DateTime?
+  parsedSpecs       Json
+  isBaseline        Boolean             @default(false)
+  comparisonResult  Json?
+  overallStatus     HwComparisonStatus?
+  status            HardwareScanStatus  @default(pending)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  parserVersion     String?
+  sourceProduct     String?
+  contentSha256     String?
+  idempotencyKey    String?
+  reviewNotes       String?
+  createdAt         DateTime            @default(now())
+  asset             Asset               @relation(fields: [assetId], references: [id])
+  submittedBy       SystemUser          @relation("HardwareScanSubmitter", fields: [submittedById], references: [id])
+  reviewedBy        SystemUser?         @relation("HardwareScanReviewer", fields: [reviewedById], references: [id])
+  proposals         InventoryFieldProposal[]
 
+  @@unique([assetId, idempotencyKey])
   @@index([assetId, isBaseline])
+}
+
+model InventoryFieldProposal {
+  id                        String             @id @default(cuid())
+  hardwareScanId            String
+  assetId                   String
+  fieldKey                  String
+  targetType                String
+  targetRecordId            String
+  proposedValueJson         Json
+  officialValueSnapshotJson Json?
+  state                     ProposalState      @default(proposed)
+  sourceConfidence          ProposalConfidence @default(observed)
+  resolvedById              String?
+  resolvedAt                DateTime?
+  reason                    String?
+  lastIdempotencyKey        String?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+  hardwareScan              HardwareScan       @relation(fields: [hardwareScanId], references: [id], onDelete: Cascade)
+  asset                     Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, state])
+  @@index([hardwareScanId, fieldKey])
 }
 
 model AssetAssignment {
@@ -854,6 +891,23 @@ enum HardwareScanStatus {
   reviewed
   flagged
   archived
+}
+
+enum ProposalState {
+  proposed
+  verified
+  conflict
+  accepted
+  rejected
+  superseded
+  unavailable
+}
+
+enum ProposalConfidence {
+  observed
+  matched
+  reviewed_accepted
+  conflicted
 }
 
 enum ScanRoomStatus {
