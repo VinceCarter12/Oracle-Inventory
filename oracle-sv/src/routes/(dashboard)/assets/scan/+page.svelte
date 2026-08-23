@@ -7,9 +7,6 @@
   // ── Permission gate ──────────────────────────────────────────────────────────
   const can = (key: string) => authStore.hasPermission(key);
 
-  // ── Mode ─────────────────────────────────────────────────────────────────────
-  let mode = $state<'camera' | 'upload' | 'phone'>('camera');
-
   // ── Camera state ─────────────────────────────────────────────────────────────
   let videoEl    = $state<HTMLVideoElement | null>(null);
   let canvasEl   = $state<HTMLCanvasElement | null>(null);
@@ -68,41 +65,6 @@
   let saving     = $state(false);
   let saveError  = $state('');
 
-  // ── Phone (QR Room) state ─────────────────────────────────────────────────────
-  interface RoomDevice {
-    deviceId:    string;
-    deviceToken: string;
-    deviceLabel: string;
-    status:      string;
-    qrDataUrl?:  string;
-  }
-  interface ScanResultItem {
-    id:          string;
-    deviceLabel: string;
-    parsedData:  Record<string, string>;
-    status:      string;
-    rejectReason?: string;
-    assetId?:    string;
-    scannedAt:   string;
-  }
-
-  let roomId        = $state('');
-  let roomCode      = $state('');
-  let roomExpiresAt = $state<Date | null>(null);
-  let roomStatus    = $state('');
-  let roomDevices   = $state<RoomDevice[]>([]);
-  let roomResults   = $state<ScanResultItem[]>([]);
-  let roomLoading   = $state(false);
-  let roomError     = $state('');
-  let roomExpired   = $state(false);
-  let batchSaving   = $state(false);
-  let batchError    = $state('');
-  let batchDone     = $state(0);
-  let selectedResults = $state<Set<string>>(new Set());
-  let pollInterval  = $state<ReturnType<typeof setInterval> | null>(null);
-  let phoneCategoryId = $state('');
-  let phoneBranchId   = $state('');
-
   const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
   function getEventPos(e: MouseEvent | TouchEvent): { x: number; y: number } {
@@ -130,14 +92,7 @@
       api.get<Branch[]>('/api/branches').catch(() => []),
     ]);
 
-    // Auto-detect desktop → suggest phone mode
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (!isMobile) {
-      mode = 'phone';
-      await createRoom();
-    } else {
-      await startCamera();
-    }
+    await startCamera();
 
     window.addEventListener('mousemove', onGlobalMove as EventListener);
     window.addEventListener('mouseup',   onGlobalUp   as EventListener);
@@ -147,22 +102,11 @@
 
   onDestroy(() => {
     stopCamera();
-    stopPolling();
     window.removeEventListener('mousemove', onGlobalMove as EventListener);
     window.removeEventListener('mouseup',   onGlobalUp   as EventListener);
     window.removeEventListener('touchmove', onGlobalMove as EventListener);
     window.removeEventListener('touchend',  onGlobalUp   as EventListener);
   });
-
-  async function switchMode(m: 'camera' | 'upload' | 'phone') {
-    if (m === mode) return;
-    stopCamera();
-    stopPolling();
-    mode = m;
-    scanned = false; previewMode = false; capturedImg = ''; scanError = '';
-    if (m === 'camera') await startCamera();
-    if (m === 'phone') await createRoom();
-  }
 
   // ── Camera capture ────────────────────────────────────────────────────────────
   async function capture() {
@@ -175,16 +119,6 @@
     canvasEl.getContext('2d')!.drawImage(videoEl, 0, 0);
     capturedImg = canvasEl.toDataURL('image/jpeg');
     stopCamera(); previewMode = true;
-  }
-
-  function handleFileUpload(e: Event) {
-    const input = e.currentTarget as HTMLInputElement;
-    const file  = input.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { capturedImg = reader.result as string; previewMode = true; };
-    reader.readAsDataURL(file);
-    input.value = '';
   }
 
   // ── ROI ───────────────────────────────────────────────────────────────────────
@@ -267,7 +201,7 @@
     try {
       const form = new FormData();
       form.append('image', blob, 'capture.jpg');
-      const raw = await fetch('/api/scan/ocr', { method: 'POST', body: form, headers: { Authorization: `Bearer ${authStore.token}` } });
+      const raw = await api.raw('/api/scan/ocr', { method: 'POST', body: form });
       if (!raw.ok) { const err = await raw.json().catch(() => ({ error: 'OCR failed' })); throw new Error(err.error ?? 'OCR failed'); }
       const data = await raw.json();
       const p = data.parsed;
@@ -333,139 +267,8 @@
     scanned = false; previewMode = false; capturedImg = ''; scanError = ''; scanWarning = ''; duplicates = [];
     assetName = brand = model = serialNumber = ''; imei1 = imei2 = macAddress = serviceTag = assetTag = deviceType = '';
     extraLines = []; roi = { x: 0, y: 0, w: 0, h: 0 };
-    if (mode === 'camera') startCamera();
+    startCamera();
   }
-
-  // ── Phone / QR Room ───────────────────────────────────────────────────────────
-  async function createRoom() {
-    roomLoading = true; roomError = ''; roomExpired = false;
-    roomId = ''; roomCode = ''; roomDevices = []; roomResults = [];
-    try {
-      const data = await api.post<{
-        roomId: string; roomCode: string; expiresAt: string;
-        devices: { deviceId: string; deviceToken: string; deviceLabel: string; status: string }[];
-      }>('/api/scan/room', { maxDevices: 5 });
-
-      roomId        = data.roomId;
-      roomCode      = data.roomCode;
-      roomExpiresAt = new Date(data.expiresAt);
-      roomStatus    = 'open';
-
-      // Generate QR data URLs client-side (dynamic import keeps SSR safe)
-      const QRCode = (await import('qrcode')).default;
-      const origin  = window.location.origin;
-      roomDevices   = await Promise.all(
-        data.devices.map(async d => ({
-          ...d,
-          qrDataUrl: await QRCode.toDataURL(`${origin}/scan/mobile?device=${d.deviceToken}`, {
-            width: 200, margin: 2,
-            color: { dark: '#000000', light: '#ffffff' },
-          }),
-        }))
-      );
-
-      startPolling();
-    } catch (err: unknown) {
-      roomError = err instanceof Error ? err.message : 'Failed to create scan room';
-    } finally { roomLoading = false; }
-  }
-
-  function startPolling() {
-    stopPolling();
-    pollInterval = setInterval(pollRoom, 1500);
-  }
-
-  function stopPolling() {
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-  }
-
-  async function pollRoom() {
-    if (!roomId) return;
-    try {
-      const data = await api.get<{
-        status: string; expiresAt: string;
-        devices: { deviceId: string; deviceLabel: string; status: string; lastSeenAt?: string }[];
-        results: ScanResultItem[];
-      }>(`/api/scan/room/${roomId}`);
-
-      roomStatus = data.status;
-      roomExpiresAt = new Date(data.expiresAt);
-
-      // Merge device statuses
-      roomDevices = roomDevices.map(d => {
-        const live = data.devices.find(ld => ld.deviceId === d.deviceId);
-        return live ? { ...d, status: live.status } : d;
-      });
-
-      roomResults = data.results;
-
-      if (data.status === 'expired') { roomExpired = true; stopPolling(); }
-    } catch { /* swallow poll errors */ }
-  }
-
-  async function closeRoom() {
-    stopPolling();
-    if (roomId) await api.delete(`/api/scan/room/${roomId}`).catch(() => {});
-    roomId = ''; roomCode = ''; roomDevices = []; roomResults = []; roomStatus = '';
-  }
-
-  async function refreshRoom() {
-    await closeRoom();
-    await createRoom();
-  }
-
-  function toggleSelect(id: string) {
-    const s = new Set(selectedResults);
-    s.has(id) ? s.delete(id) : s.add(id);
-    selectedResults = s;
-  }
-
-  function selectAllPending() {
-    selectedResults = new Set(roomResults.filter(r => r.status === 'pending').map(r => r.id));
-  }
-
-  function clearSelection() { selectedResults = new Set(); }
-
-  async function batchCreate(ids: string[]) {
-    if (!ids.length) return;
-    batchSaving = true; batchError = ''; batchDone = 0;
-    try {
-      const res = await api.post<{ created: number; failed: { id: string; reason: string }[] }>(
-        `/api/scan/room/${roomId}/batch-create`,
-        { resultIds: ids, categoryId: phoneCategoryId || undefined, branchId: phoneBranchId || undefined }
-      );
-      batchDone = res.created;
-      selectedResults = new Set();
-      await pollRoom();
-    } catch (err: unknown) {
-      batchError = err instanceof Error ? err.message : 'Batch create failed';
-    } finally { batchSaving = false; }
-  }
-
-  function exportCsv() {
-    const pending = roomResults.filter(r => r.status === 'pending');
-    if (!pending.length) return;
-    const header = ['#', 'Asset Name', 'Brand', 'Model', 'Serial Number', 'IMEI 1', 'MAC', 'Category Hint', 'Scanned By', 'Scanned At'];
-    const rows = pending.map((r, i) => {
-      const p = r.parsedData;
-      return [
-        i + 1, p.assetName || '', p.brand || '', p.model || '',
-        p.serialNumber || '', p.imei1 || '', p.macAddress || '',
-        p.categoryHint || '', r.deviceLabel,
-        new Date(r.scannedAt).toLocaleString(),
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
-    });
-    const csv = [header.join(','), ...rows].join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    const a = document.createElement('a'); a.href = url; a.download = `scan-${roomCode}-${Date.now()}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // ── Derived ───────────────────────────────────────────────────────────────────
-  const pendingResults  = $derived(roomResults.filter(r => r.status === 'pending'));
-  const acceptedResults = $derived(roomResults.filter(r => r.status === 'accepted'));
-  const deviceStatusColor = (s: string) => s === 'connected' ? '#22c55e' : s === 'scanning' ? '#f59e0b' : '#94a3b8';
-  const deviceStatusLabel = (s: string) => ({ waiting: 'Waiting', connected: 'Connected', scanning: 'Scanning…', done: 'Done' }[s] ?? s);
 </script>
 
 <div class="page">
@@ -489,233 +292,15 @@
     </div>
 
   {:else}
-    <!-- Mode toggle -->
-    <div class="mode-toggle">
-      <button class="mode-btn" class:active={mode === 'camera'} onclick={() => switchMode('camera')}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Camera
-      </button>
-      <button class="mode-btn" class:active={mode === 'upload'} onclick={() => switchMode('upload')}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Upload
-      </button>
-      <button class="mode-btn phone-mode-btn" class:active={mode === 'phone'} onclick={() => switchMode('phone')}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-        Use Phone
-        {#if pendingResults.length > 0 && mode === 'phone'}
-          <span class="mode-badge">{pendingResults.length}</span>
-        {/if}
-      </button>
-    </div>
-
-    <!-- ── PHONE MODE ──────────────────────────────────────────────────── -->
-    {#if mode === 'phone'}
-      {#if roomLoading}
-        <div class="room-loading">
-          <span class="spin-dark"></span> Creating scan room…
-        </div>
-      {:else if roomError}
-        <div class="room-error-card">
-          <p>{roomError}</p>
-          <button class="btn-secondary" onclick={createRoom}>Retry</button>
-        </div>
-      {:else if roomExpired}
-        <div class="room-expired-card">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <p>Scan session expired (30 min limit).</p>
-          <button class="btn-primary" onclick={refreshRoom}>Start New Session</button>
-        </div>
-      {:else}
-        <div class="phone-layout">
-
-          <!-- LEFT: QR codes + device statuses -->
-          <div class="phone-left">
-            <div class="qr-header">
-              <div>
-                <h2 class="section-title">Scan with your phone</h2>
-                <p class="section-sub">Up to 5 phones can scan simultaneously</p>
-              </div>
-              <div class="room-meta">
-                <span class="room-code-badge">Room: {roomCode}</span>
-                {#if roomExpiresAt}
-                  <span class="expire-hint">Expires {roomExpiresAt.toLocaleTimeString()}</span>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Device grid -->
-            <div class="device-grid">
-              {#each roomDevices as device}
-                <div class="device-card" class:device-active={device.status === 'connected' || device.status === 'scanning'}>
-                  <div class="device-header">
-                    <span class="device-label">{device.deviceLabel}</span>
-                    <span class="device-status-dot" style:background={deviceStatusColor(device.status)}></span>
-                    <span class="device-status-txt">{deviceStatusLabel(device.status)}</span>
-                  </div>
-                  {#if device.qrDataUrl}
-                    <div class="qr-wrap">
-                      <img src={device.qrDataUrl} alt="QR for {device.deviceLabel}" class="qr-img" />
-                    </div>
-                  {:else}
-                    <div class="qr-placeholder"><span class="spin-dark"></span></div>
-                  {/if}
-                  <p class="qr-hint">Scan with {device.deviceLabel} to connect</p>
-                </div>
-              {/each}
-            </div>
-
-            <!-- Batch options -->
-            {#if pendingResults.length > 0}
-              <div class="batch-options">
-                <h3 class="batch-title">Save Options</h3>
-                <div class="fields-row">
-                  <div class="field-group">
-                    <label class="field-label">Category (optional)</label>
-                    <select class="field-select" bind:value={phoneCategoryId}>
-                      <option value="">— All categories —</option>
-                      {#each categories as c}<option value={c.id}>{c.name}</option>{/each}
-                    </select>
-                  </div>
-                  <div class="field-group">
-                    <label class="field-label">Branch (optional)</label>
-                    <select class="field-select" bind:value={phoneBranchId}>
-                      <option value="">— All branches —</option>
-                      {#each branches as b}<option value={b.id}>{b.name}</option>{/each}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            {/if}
-
-            <button class="btn-ghost refresh-btn" onclick={refreshRoom}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              New Session
-            </button>
-          </div>
-
-          <!-- RIGHT: Live results table -->
-          <div class="phone-right">
-            <div class="results-header">
-              <div>
-                <h2 class="section-title">
-                  Scan Results
-                  {#if roomResults.length > 0}<span class="result-count-badge">{roomResults.length}</span>{/if}
-                </h2>
-                <p class="section-sub">
-                  {#if pendingResults.length > 0}
-                    {pendingResults.length} pending · {acceptedResults.length} saved
-                  {:else if roomResults.length === 0}
-                    Scans from your phones will appear here in real time
-                  {:else}
-                    All {roomResults.length} items saved
-                  {/if}
-                </p>
-              </div>
-              {#if pendingResults.length > 0}
-                <div class="results-actions">
-                  <button class="btn-secondary-sm" onclick={exportCsv}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    CSV
-                  </button>
-                  <button class="btn-primary-sm" onclick={selectAllPending} disabled={batchSaving}>
-                    Select All
-                  </button>
-                  {#if selectedResults.size > 0}
-                    <button class="btn-primary-sm green" onclick={() => batchCreate([...selectedResults])} disabled={batchSaving}>
-                      {#if batchSaving}<span class="spin-sm"></span>{/if}
-                      Save {selectedResults.size} Selected
-                    </button>
-                    <button class="btn-ghost-sm" onclick={clearSelection}>Clear</button>
-                  {:else}
-                    <button class="btn-primary-sm green" onclick={() => batchCreate(pendingResults.map(r => r.id))} disabled={batchSaving}>
-                      {#if batchSaving}<span class="spin-sm"></span>{/if}
-                      Accept All ({pendingResults.length})
-                    </button>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-
-            {#if batchDone > 0}
-              <div class="batch-success">{batchDone} asset{batchDone > 1 ? 's' : ''} created successfully.</div>
-            {/if}
-            {#if batchError}
-              <div class="batch-err">{batchError}</div>
-            {/if}
-
-            {#if roomResults.length === 0}
-              <!-- Waiting state -->
-              <div class="results-empty">
-                <div class="pulse-dot"></div>
-                <p>Waiting for phone scans…</p>
-                <p class="results-empty-hint">Scan the QR code on the left with your phone to start scanning items.</p>
-              </div>
-            {:else}
-              <!-- Results table -->
-              <div class="results-table-wrap">
-                <table class="results-table">
-                  <thead>
-                    <tr>
-                      <th class="th-check">
-                        <input type="checkbox"
-                          checked={selectedResults.size > 0 && selectedResults.size === pendingResults.length}
-                          onchange={(e) => (e.currentTarget as HTMLInputElement).checked ? selectAllPending() : clearSelection()} />
-                      </th>
-                      <th>#</th>
-                      <th>Asset Name</th>
-                      <th>Serial / IMEI</th>
-                      <th>Brand · Model</th>
-                      <th>Device</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each roomResults as r, i}
-                      <tr class="result-row" class:row-accepted={r.status === 'accepted'} class:row-rejected={r.status === 'rejected'}>
-                        <td class="td-check">
-                          {#if r.status === 'pending'}
-                            <input type="checkbox"
-                              checked={selectedResults.has(r.id)}
-                              onchange={() => toggleSelect(r.id)} />
-                          {/if}
-                        </td>
-                        <td class="td-num">{i + 1}</td>
-                        <td class="td-name">{r.parsedData.assetName || '—'}</td>
-                        <td class="td-serial mono">{r.parsedData.serialNumber || r.parsedData.imei1 || '—'}</td>
-                        <td class="td-model">{[r.parsedData.brand, r.parsedData.model].filter(Boolean).join(' ') || '—'}</td>
-                        <td class="td-device">{r.deviceLabel}</td>
-                        <td class="td-status">
-                          {#if r.status === 'pending'}
-                            <span class="status-pill pending">Pending</span>
-                          {:else if r.status === 'accepted'}
-                            <a href="/assets/{r.assetId}" class="status-pill accepted">Saved</a>
-                          {:else}
-                            <span class="status-pill rejected" title={r.rejectReason}>Rejected</span>
-                          {/if}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-    <!-- ── CAMERA / UPLOAD MODES ────────────────────────────────────────── -->
-    {:else}
       <div class="scan-layout">
         <!-- LEFT: Camera / Preview / Post-scan -->
         <div class="scan-left">
           {#if !previewMode && !scanned}
-            {#if mode === 'camera'}
               <div class="camera-wrap">
                 {#if cameraError}
                   <div class="cam-error">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                     <p>Camera error: {cameraError}</p>
-                    <p class="cam-hint">Switch to Upload or Use Phone mode.</p>
                   </div>
                 {:else}
                   <!-- svelte-ignore a11y_media_has_caption -->
@@ -735,16 +320,6 @@
                   {:else}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>Capture{/if}
                 </button>
               {/if}
-            {/if}
-
-            {#if mode === 'upload'}
-              <label class="upload-zone">
-                <input type="file" accept="image/*" onchange={handleFileUpload} class="hidden-input" />
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span>Click or drop image here</span>
-                <small>JPG, PNG, WEBP — max 10 MB</small>
-              </label>
-            {/if}
 
             {#if scanError}<div class="scan-err-banner">{scanError}</div>{/if}
 
@@ -754,7 +329,6 @@
                 <li>Hold the device label flat and in good light</li>
                 <li>Fit the serial number / IMEI clearly in frame</li>
                 <li>After capture, drag the box to tighten the crop before scanning</li>
-                <li>Use Upload if the camera is unavailable</li>
               </ul>
             </div>
 
@@ -812,7 +386,7 @@
             <div class="idle-panel">
               <div class="idle-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
               <p class="idle-title">Ready to scan</p>
-              <p class="idle-sub">Capture or upload an image of the asset label — then adjust the crop and hit <strong>Scan ROI</strong>.</p>
+              <p class="idle-sub">Capture an image of the asset label — then adjust the crop and hit <strong>Scan ROI</strong>.</p>
             </div>
           {:else if previewMode}
             <div class="preview-panel">
@@ -889,7 +463,6 @@
           {/if}
         </div>
       </div>
-    {/if}
   {/if}
 </div>
 
@@ -903,85 +476,9 @@
   .page-sub { font-size: 13px; color: var(--mute); font-family: var(--font-sans); margin-top: 2px; }
   .perm-denied { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 20px; color: var(--mute); text-align: center; }
 
-  /* ── Mode toggle ── */
-  .mode-toggle { display: flex; gap: 8px; }
-  .mode-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 16px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas); cursor: pointer; font-size: 13px; color: var(--mute); font-weight: 500; font-family: var(--font-sans); transition: all 120ms; position: relative; }
-  .mode-btn.active { background: var(--ink); color: var(--on-primary); border-color: var(--ink); }
-  .mode-btn:not(.active):hover { background: var(--canvas-soft-2); color: var(--body); }
-  .phone-mode-btn.active { background: #1d4ed8; border-color: #1d4ed8; }
-  .mode-badge { background: #ef4444; color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: 700; margin-left: 2px; }
-
-  /* ── Two-column layouts ── */
+  /* ── Two-column layout ── */
   .scan-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; align-items: start; }
   .scan-left, .scan-right { display: flex; flex-direction: column; gap: 16px; }
-  .phone-layout { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 20px; align-items: start; }
-  .phone-left, .phone-right { display: flex; flex-direction: column; gap: 16px; }
-
-  /* ── Room loading / error / expired ── */
-  .room-loading { display: flex; align-items: center; gap: 10px; padding: 40px 20px; color: var(--mute); font-size: 14px; font-family: var(--font-sans); }
-  .room-error-card, .room-expired-card { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 48px 24px; background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); text-align: center; color: var(--mute); font-family: var(--font-sans); font-size: 14px; }
-
-  /* ── QR section ── */
-  .qr-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .section-title { font-size: 15px; font-weight: 600; color: var(--ink); font-family: var(--font-sans); margin: 0 0 3px; }
-  .section-sub { font-size: 12px; color: var(--mute); font-family: var(--font-sans); margin: 0; }
-  .room-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
-  .room-code-badge { background: var(--canvas-soft-2); border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 3px 8px; font-size: 11px; font-weight: 600; color: var(--ink); font-family: var(--font-mono); letter-spacing: .06em; }
-  .expire-hint { font-size: 11px; color: var(--mute); font-family: var(--font-sans); }
-
-  .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-  .device-card { background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: border-color 200ms; }
-  .device-card.device-active { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.1); }
-  .device-header { display: flex; align-items: center; gap: 6px; width: 100%; }
-  .device-label { font-size: 12px; font-weight: 600; color: var(--ink); font-family: var(--font-sans); flex: 1; }
-  .device-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .device-status-txt { font-size: 10px; color: var(--mute); font-family: var(--font-sans); }
-  .qr-wrap { width: 100%; aspect-ratio: 1; background: #fff; border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-  .qr-img { width: 100%; height: 100%; object-fit: contain; }
-  .qr-placeholder { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--canvas-soft); border-radius: var(--r-sm); }
-  .qr-hint { font-size: 10px; color: var(--mute); font-family: var(--font-sans); text-align: center; line-height: 1.4; }
-  .refresh-btn { align-self: flex-start; display: flex; align-items: center; gap: 6px; color: var(--mute); font-size: 12px; font-family: var(--font-sans); }
-
-  /* ── Batch options ── */
-  .batch-options { background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-  .batch-title { font-size: 12px; font-weight: 600; color: var(--body); font-family: var(--font-sans); text-transform: uppercase; letter-spacing: .05em; margin: 0; }
-
-  /* ── Results panel ── */
-  .results-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .result-count-badge { display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: var(--on-primary); border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; vertical-align: middle; }
-  .results-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-
-  .batch-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; font-family: var(--font-sans); }
-  .batch-err { background: var(--error-soft); border: 1px solid color-mix(in oklch, var(--error) 30%, transparent); color: var(--error); border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; font-family: var(--font-sans); }
-
-  .results-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 24px; background: var(--canvas); border: 1px dashed var(--hairline); border-radius: var(--r-lg); text-align: center; color: var(--mute); font-family: var(--font-sans); font-size: 14px; }
-  .results-empty-hint { font-size: 12px; color: var(--mute); max-width: 260px; line-height: 1.6; }
-  .pulse-dot { width: 12px; height: 12px; border-radius: 50%; background: #22c55e; animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(1.4); } }
-
-  /* ── Results table ── */
-  .results-table-wrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--r-lg); }
-  .results-table { width: 100%; border-collapse: collapse; font-family: var(--font-sans); font-size: 13px; }
-  .results-table thead { background: var(--canvas-soft); }
-  .results-table th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; border-bottom: 1px solid var(--hairline); }
-  .th-check { width: 36px; }
-  .results-table tbody tr { border-bottom: 1px solid var(--hairline); transition: background 100ms; }
-  .results-table tbody tr:last-child { border-bottom: none; }
-  .results-table tbody tr:hover { background: var(--canvas-soft); }
-  .result-row td { padding: 10px 12px; color: var(--body); vertical-align: middle; }
-  .row-accepted { opacity: .65; }
-  .row-rejected { opacity: .5; }
-  .td-check { width: 36px; }
-  .td-num { color: var(--mute); font-size: 12px; width: 32px; }
-  .td-name { font-weight: 500; color: var(--ink); }
-  .td-serial { font-family: var(--font-mono); font-size: 12px; color: var(--body); }
-  .td-model { color: var(--mute); }
-  .td-device { font-size: 12px; color: var(--mute); }
-  .td-status { white-space: nowrap; }
-  .status-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; text-decoration: none; }
-  .status-pill.pending  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
-  .status-pill.accepted { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
-  .status-pill.rejected { background: var(--error-soft); color: var(--error); border: 1px solid color-mix(in oklch, var(--error) 30%, transparent); }
 
   /* ── Camera ── */
   .camera-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: oklch(12% 0 0); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-l2); }
@@ -1000,12 +497,6 @@
   .capture-btn:hover:not(:disabled) { opacity: .85; }
   .capture-btn:disabled { opacity: .5; cursor: not-allowed; }
 
-  /* ── Upload ── */
-  .upload-zone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 52px 24px; border: 2px dashed var(--hairline); border-radius: var(--r-lg); cursor: pointer; color: var(--mute); text-align: center; transition: border-color 150ms, color 150ms; }
-  .upload-zone:hover { border-color: var(--ink); color: var(--ink); }
-  .upload-zone span { font-size: 14px; font-weight: 500; font-family: var(--font-sans); }
-  .upload-zone small { font-size: 12px; opacity: .6; }
-  .hidden-input { display: none; }
   .scan-err-banner { background: var(--error-soft); color: var(--error); border: 1px solid color-mix(in oklch, var(--error) 30%, transparent); border-radius: var(--r-md); padding: 11px 14px; font-size: 13px; font-family: var(--font-sans); }
 
   /* ── Tips ── */
@@ -1096,29 +587,16 @@
   .btn-secondary { padding: 9px 16px; border: 1px solid var(--hairline); background: var(--canvas); color: var(--body); border-radius: var(--r-md); font-size: 13.5px; font-family: var(--font-sans); cursor: pointer; transition: background 120ms; }
   .btn-secondary:hover { background: var(--canvas-soft-2); }
   .wide { width: 100%; }
-  .btn-primary-sm { padding: 6px 12px; background: var(--ink); color: var(--on-primary); border: none; border-radius: var(--r-md); font-size: 12px; font-weight: 600; font-family: var(--font-sans); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: opacity 120ms; white-space: nowrap; }
-  .btn-primary-sm:disabled { opacity: .5; cursor: not-allowed; }
-  .btn-primary-sm.green { background: #16a34a; }
-  .btn-secondary-sm { padding: 6px 12px; border: 1px solid var(--hairline); background: var(--canvas); color: var(--body); border-radius: var(--r-md); font-size: 12px; font-family: var(--font-sans); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background 120ms; white-space: nowrap; }
-  .btn-secondary-sm:hover { background: var(--canvas-soft-2); }
-  .btn-ghost { background: transparent; border: none; color: var(--mute); cursor: pointer; font-size: 13px; font-family: var(--font-sans); padding: 6px 0; transition: color 120ms; }
-  .btn-ghost:hover { color: var(--body); }
-  .btn-ghost-sm { background: transparent; border: none; color: var(--mute); cursor: pointer; font-size: 12px; font-family: var(--font-sans); padding: 4px 0; transition: color 120ms; white-space: nowrap; }
-  .btn-ghost-sm:hover { color: var(--body); }
-
   /* ── Spinners ── */
   .spin { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
-  .spin-sm { display: inline-block; width: 11px; height: 11px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
   .spin-dark { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--hairline); border-top-color: var(--mute); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Responsive ── */
-  @media (max-width: 1100px) { .phone-layout { grid-template-columns: 1fr; } }
   @media (max-width: 900px) {
     .scan-layout { grid-template-columns: 1fr; }
     .scan-right { order: -1; }
     .idle-panel { min-height: 140px; padding: 28px; }
-    .mode-toggle { flex-wrap: wrap; }
   }
-  @media (max-width: 600px) { .fields-row { grid-template-columns: 1fr; } .device-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .fields-row { grid-template-columns: 1fr; } }
 </style>
