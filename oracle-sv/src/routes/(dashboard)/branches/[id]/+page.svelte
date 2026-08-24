@@ -16,10 +16,19 @@
     _count: { assets: number; employees: number };
   }
 
+  interface StockSummaryItem { id: string; sku: string; name: string; balance: number; }
+  interface StockSummary { branchId: string; locations: Array<{ id: string; name: string }>; items: StockSummaryItem[]; }
+
   const branchId = $derived($page.params.id);
   let branch  = $state<Branch | null>(null);
   let loading = $state(true);
   let loadErr = $state('');
+
+  let stockSummary = $state<StockSummary | null>(null);
+  let stockLoading = $state(true);
+  let stockError = $state('');
+  const lowStockThreshold = 5; // Client-side heuristic when no per-item policy is loaded here.
+  const lowStockItems = $derived(stockSummary ? stockSummary.items.filter((i) => i.balance <= lowStockThreshold) : []);
 
   // ── Edit modal ─────────────────────────────────────────────────────────────
   let showEdit = $state(false);
@@ -39,6 +48,20 @@
       loadErr = (e as Error).message;
     } finally {
       loading = false;
+    }
+    if (can('view_stock')) {
+      try {
+        stockSummary = await api.get<StockSummary>(`/api/branches/${branchId}/stock-summary`);
+      } catch (e) {
+        const message = (e as Error).message;
+        stockError = message === 'Tools and stock is disabled.'
+          ? 'Tools & Stock is prepared but is not enabled for this environment yet.'
+          : message;
+      } finally {
+        stockLoading = false;
+      }
+    } else {
+      stockLoading = false;
     }
   });
 
@@ -251,6 +274,53 @@
       </div>
     </div>
   </div>
+
+  <!-- Stock summary -->
+  {#if can('view_stock')}
+  <div class="card stock-card" aria-labelledby="stock-summary-title">
+    <div class="card-header">
+      <span class="card-title" id="stock-summary-title">Tools &amp; Stock Summary</span>
+    </div>
+    {#if stockLoading}
+      <p class="stock-state">Loading stock summary…</p>
+    {:else if stockError}
+      <p class="stock-state">{stockError}</p>
+    {:else if !stockSummary || stockSummary.items.length === 0}
+      <p class="stock-state">No stock items recorded for this branch yet.</p>
+    {:else}
+      <div class="stock-stats">
+        <div class="stock-stat">
+          <span class="stock-stat-label">Locations</span>
+          <span class="stock-stat-value">{stockSummary.locations.length}</span>
+        </div>
+        <div class="stock-stat">
+          <span class="stock-stat-label">Tracked items</span>
+          <span class="stock-stat-value">{stockSummary.items.length}</span>
+        </div>
+        <div class="stock-stat">
+          <span class="stock-stat-label">Low stock</span>
+          <span class="stock-stat-value" class:stat-warn={lowStockItems.length > 0}>{lowStockItems.length}</span>
+        </div>
+      </div>
+      {#if lowStockItems.length > 0}
+        <table class="stock-table">
+          <caption class="sr-only">Items at or below the low-stock threshold at this branch</caption>
+          <thead><tr><th scope="col">SKU</th><th scope="col">Item</th><th scope="col">On hand</th><th scope="col">Status</th></tr></thead>
+          <tbody>
+            {#each lowStockItems as item (item.id)}
+              <tr>
+                <td>{item.sku}</td>
+                <td><a href={`/stock/items/${item.id}`}>{item.name}</a></td>
+                <td>{item.balance}</td>
+                <td><span class="low-badge"><span aria-hidden="true">&#9888;</span> Low stock</span></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    {/if}
+  </div>
+  {/if}
 
   <!-- Detail card -->
   <div class="card detail-card">
@@ -468,6 +538,19 @@
   .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600; }
   .badge-green { background: #dcfce7; color: #16a34a; }
   .badge-red { background: #fee2e2; color: #dc2626; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .stock-card { padding: 0; }
+  .stock-state { padding: 16px 20px; margin: 0; color: var(--mute); font-size: 13px; }
+  .stock-stats { display: flex; gap: 24px; padding: 16px 20px; border-bottom: 1px solid var(--hairline); }
+  .stock-stat { display: flex; flex-direction: column; gap: 2px; }
+  .stock-stat-label { font-size: 11px; color: var(--mute); text-transform: uppercase; letter-spacing: .05em; }
+  .stock-stat-value { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .stock-stat-value.stat-warn { color: #b45309; }
+  .stock-table { width: 100%; border-collapse: collapse; text-align: left; }
+  .stock-table th, .stock-table td { padding: 10px 20px; border-top: 1px solid var(--hairline); font-size: 13px; }
+  .stock-table th { color: var(--mute); font-weight: 600; }
+  .low-badge { display: inline-flex; align-items: center; gap: 5px; color: #b45309; font-weight: 600; font-size: 12.5px; }
 
   .map-section { border-top: 1px solid var(--hairline); flex: 1; display: flex; flex-direction: column; }
   .map-iframe { width: 100%; flex: 1; min-height: 380px; border: none; display: block; }
