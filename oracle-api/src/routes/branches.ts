@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
+import { enabled as stockEnabled, gate as stockGate } from "./stock";
 
 const router = Router();
 router.use(requireAuth);
@@ -51,6 +52,23 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
   });
   if (!branch) { res.status(404).json({ error: "Branch not found" }); return; }
   res.json(branch);
+});
+
+// GET /api/branches/:id/stock-summary — spec-canonical alias for GET /api/stock/branches/:branchId/summary.
+// Same fail-closed gate, same branch/location scoping, same derived-balance shape.
+router.get("/:id/stock-summary", requirePermission("view_stock"), async (req: AuthRequest, res: Response) => {
+  if (!(await stockEnabled())) { stockGate(res); return; }
+  const account = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } });
+  const global = account?.role?.name.toLowerCase() === "super_admin";
+  if (!global && account?.branchId !== req.params.id) { res.status(403).json({ error: "Branch summary is outside your scope.", code: "STOCK_BRANCH_FORBIDDEN" }); return; }
+  const locations = await prisma.stockLocation.findMany({ where: { branchId: req.params.id, archivedAt: null } });
+  const items = await prisma.stockItem.findMany({ where: { active: true } });
+  const locationIds = locations.map((location) => location.id);
+  const balances = await Promise.all(items.map(async (item) => {
+    const rows = await prisma.stockLedgerEntry.findMany({ where: { movement: { stockItemId: item.id }, locationId: { in: locationIds } }, select: { quantityDelta: true } });
+    return { id: item.id, sku: item.sku, name: item.name, balance: rows.reduce((sum, row) => sum + Number(row.quantityDelta), 0) };
+  }));
+  res.json({ branchId: req.params.id, locations, items: balances });
 });
 
 // PATCH /api/branches/:id
