@@ -114,6 +114,7 @@ model Branch {
   stockLocations StockLocation[]
   vlans            Vlan[]
   portConnections  PortConnection[]
+  ispCircuits      IspCircuit[]
 }
 
 model FeatureRollout {
@@ -223,6 +224,9 @@ model Asset {
   networkInterfaces   NetworkInterface[]
   networkPorts        NetworkPort[]
   proposals           InventoryFieldProposal[]
+  serverProfile       ServerProfile?
+  firewallProfile     FirewallProfile?
+  circuitEquipment    CircuitEquipmentAssignment[]
 }
 
 model DeviceProfile {
@@ -318,6 +322,7 @@ model NetworkInterface {
   ipObservations         IpAddressObservation[]
   vlanAssignments        InterfaceVlanAssignment[]
   portConnections        PortConnection[]          @relation("InterfaceConnections")
+  firewallProfiles       FirewallProfile[]
 
   @@unique([assetId, interfaceName])
   @@unique([idempotencyKey])
@@ -1028,6 +1033,7 @@ model SecretReference {
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   assets       AssetSecretReference[] @relation("SecretReferenceLinks")
+  circuits     IspCircuitSecretReference[]
 
   @@unique([provider, referenceId])
 }
@@ -1060,4 +1066,225 @@ enum RecorderType {
   dvr
   hybrid
   other
+}
+
+// --- Phase 5: Servers, firewall, and ISP circuit inventory ---
+// Metadata only. Never stores server/firewall/ISP credentials, ruleset
+// exports, or raw configuration — SecretReference is the only pointer to
+// secret material, matching the Phase 4 invariant. FirewallProfile links to
+// NetworkInterface (Phase 3) and IspCircuitSecretReference links to
+// SecretReference (Phase 4) now that both phases are merged in.
+
+model ServerProfile {
+  id                     String                 @id @default(cuid())
+  assetId                String                 @unique
+  environment            ServerEnvironment
+  criticality            Criticality
+  virtualizationRole     VirtualizationRole
+  serviceOwner           String
+  supportOwner           String?
+  purpose                String?
+  idempotencyKey         String?                @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  asset                  Asset                  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  roles                  ServerRoleAssignment[]
+}
+
+model ServerRoleAssignment {
+  id                     String         @id @default(cuid())
+  serverId               String
+  roleType               ServerRoleType
+  roleName               String?
+  domainName             String?
+  isPrimary              Boolean        @default(false)
+  validFrom              DateTime       @default(now())
+  validTo                DateTime?
+  notes                  String?
+  idempotencyKey         String?        @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  server                 ServerProfile  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, validFrom])
+}
+
+model FirewallProfile {
+  id                       String                 @id @default(cuid())
+  assetId                  String                 @unique
+  deploymentMode           FirewallDeploymentMode
+  haRole                   FirewallHaRole
+  policyOwner              String
+  managementInterfaceId    String?
+  configurationArtifactRef String?
+  idempotencyKey           String?                @unique
+  idempotencyPayloadHash   String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  asset                    Asset                  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  managementInterface      NetworkInterface?      @relation(fields: [managementInterfaceId], references: [id], onDelete: SetNull)
+}
+
+model IspCircuit {
+  id                      String                       @id @default(cuid())
+  branchId                String
+  providerName            String
+  circuitLabel            String
+  serviceType             IspServiceType
+  status                  IspCircuitStatus
+  demarcLocation          String?
+  downloadMbps            Decimal
+  uploadMbps              Decimal
+  addressingMode          IspAddressingMode
+  isSharedService         Boolean                      @default(false)
+  sharedServiceReason     String?
+  activatedAt             DateTime?
+  terminatedAt            DateTime?
+  providerCircuitIdMasked String?
+  idempotencyKey          String?                      @unique
+  idempotencyPayloadHash  String?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  branch                  Branch                       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  equipment               CircuitEquipmentAssignment[]
+  addresses               IspCircuitAddress[]
+  secretReferences        IspCircuitSecretReference[]
+
+  @@index([branchId, status])
+}
+
+model CircuitEquipmentAssignment {
+  id                     String               @id @default(cuid())
+  circuitId              String
+  assetId                String
+  role                   CircuitEquipmentRole
+  validFrom              DateTime             @default(now())
+  validTo                DateTime?
+  idempotencyKey         String?              @unique
+  idempotencyPayloadHash String?
+  sharedServiceApproved  Boolean              @default(false)
+  sharedServiceReason    String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  circuit                IspCircuit           @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  asset                  Asset                @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([circuitId, validFrom])
+}
+
+model IspCircuitAddress {
+  id                     String     @id @default(cuid())
+  circuitId              String
+  address                String
+  prefixLength           Int
+  gateway                String?
+  validFrom              DateTime   @default(now())
+  validTo                DateTime?
+  idempotencyKey         String?    @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  circuit                IspCircuit @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+
+  @@index([circuitId, validFrom])
+}
+
+model IspCircuitSecretReference {
+  id                     String          @id @default(cuid())
+  circuitId              String
+  secretReferenceId      String
+  purpose                String?
+  idempotencyKey         String?         @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime        @default(now())
+  circuit                IspCircuit      @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  secretReference        SecretReference @relation(fields: [secretReferenceId], references: [id], onDelete: Cascade)
+
+  @@unique([circuitId, secretReferenceId])
+}
+
+enum ServerEnvironment {
+  production
+  staging
+  development
+  test
+  other
+}
+
+enum Criticality {
+  critical
+  high
+  medium
+  low
+}
+
+enum VirtualizationRole {
+  physical
+  hypervisor
+  virtual_machine
+  container_host
+  other
+}
+
+enum ServerRoleType {
+  domain_controller
+  file_server
+  application_server
+  database_server
+  backup_server
+  dns_server
+  dhcp_server
+  other
+}
+
+enum FirewallDeploymentMode {
+  routed_gateway
+  transparent_bridge
+  host_firewall
+  virtual_appliance
+  other
+}
+
+enum FirewallHaRole {
+  standalone
+  active
+  passive
+  member
+  unknown
+}
+
+enum IspServiceType {
+  fiber
+  dsl
+  cable
+  wireless
+  leased_line
+  satellite
+  other
+}
+
+enum IspCircuitStatus {
+  planned
+  active
+  degraded
+  suspended
+  terminated
+}
+
+enum IspAddressingMode {
+  static
+  dhcp
+  dynamic
+  pppoe
+  cgnat
+  unknown
+}
+
+enum CircuitEquipmentRole {
+  ont
+  modem
+  router
+  firewall
 }
