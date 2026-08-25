@@ -19,6 +19,7 @@ const PERMISSIONS = [
   { id: "perm-approve-transactions",key: "approve_transactions", description: "Approve asset transactions" },
   { id: "perm-access-logs",         key: "access_logs",         description: "View activity logs" },
   { id: "perm-manage-settings",     key: "manage_settings",     description: "Manage system settings" },
+  { id: "perm-manage-branches",     key: "manage_branches",     description: "Create, edit, archive, and delete branches" },
   { id: "perm-import-inventory",    key: "import_inventory",    description: "Upload and import Excel/CSV inventory files" },
   { id: "perm-force-import",        key: "force_import",        description: "Force overwrite duplicates during import" },
   { id: "perm-scan-assets",        key: "scan_assets",         description: "Use OCR scanner to capture asset data" },
@@ -30,7 +31,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   "role-super-admin": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
     "perm-manage-users", "perm-assign-roles", "perm-view-reports", "perm-manage-stock",
-    "perm-approve-transactions", "perm-access-logs", "perm-manage-settings",
+    "perm-approve-transactions", "perm-access-logs", "perm-manage-settings", "perm-manage-branches",
     "perm-import-inventory", "perm-force-import", "perm-scan-assets",
   ],
   "role-admin": [

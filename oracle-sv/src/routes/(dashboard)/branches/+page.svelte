@@ -7,6 +7,7 @@
   import SearchInput from '$lib/components/SearchInput.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import { can } from '$lib/utils/permissions';
 
   interface Branch {
     id: string;
@@ -32,7 +33,15 @@
   let showCreate  = $state(false);
   let creating    = $state(false);
   let createErr   = $state('');
-  let createForm  = $state({ name: '', address: '' });
+  let createForm  = $state({ name: '', address: '', latitude: '', longitude: '' });
+  let createMapEl = $state<HTMLDivElement | null>(null);
+  let searchingAddress = $state(false);
+  let addressResults = $state<{ display_name: string; lat: string; lon: string }[]>([]);
+  let showAddressResults = $state(false);
+  let createMap: any = null;
+  let createMarker: any = null;
+  let L: any = null;
+  const PHILIPPINES_BOUNDS: [[number, number], [number, number]] = [[4.2, 116.7], [21.4, 126.7]];
 
   // ── Edit modal ────────────────────────────────────────────────────────────
   let showEdit    = $state(false);
@@ -74,6 +83,53 @@
   }
   function handlePerPageChange() { currentPage = 1; }
 
+  function setCreatePin(lat: number, lng: number, zoom = false) {
+    createForm.latitude = lat.toFixed(6);
+    createForm.longitude = lng.toFixed(6);
+    if (!createMap || !L) return;
+    if (zoom) createMap.setView([lat, lng], 15);
+    if (createMarker) createMarker.setLatLng([lat, lng]);
+    else createMarker = L.marker([lat, lng], { draggable: true }).addTo(createMap);
+    createMarker.on('dragend', () => {
+      const point = createMarker.getLatLng();
+      createForm.latitude = point.lat.toFixed(6);
+      createForm.longitude = point.lng.toFixed(6);
+    });
+  }
+
+  $effect(() => {
+    if (!showCreate || !createMapEl) return;
+    let destroyed = false;
+    (async () => {
+      if (!L) L = (await import('leaflet')).default;
+      if (destroyed || !createMapEl) return;
+      createMap = L.map(createMapEl, {
+        maxBounds: PHILIPPINES_BOUNDS,
+        maxBoundsViscosity: 1,
+      }).setView([12.8797, 121.7740], 6);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(createMap);
+      createMap.on('click', (event: any) => setCreatePin(event.latlng.lat, event.latlng.lng));
+    })();
+    return () => {
+      destroyed = true;
+      if (createMap) { createMap.remove(); createMap = null; createMarker = null; }
+    };
+  });
+
+  async function searchAddress() {
+    const query = createForm.address.trim();
+    if (!query) { createErr = 'Enter an address before searching the map.'; return; }
+    searchingAddress = true; createErr = ''; showAddressResults = false;
+    try {
+      addressResults = await api.post<{ display_name: string; lat: string; lon: string }[]>('/api/branches/geocode', { query });
+      showAddressResults = addressResults.length > 0;
+      if (!addressResults.length) createErr = 'No matching address found. You can still place the pin manually.';
+    } catch (error) { createErr = (error as Error).message; addressResults = []; }
+    finally { searchingAddress = false; }
+  }
+
   function mapSrc(b: Branch) {
     if (!b.latitude || !b.longitude) return null;
     const d = 0.012;
@@ -88,10 +144,12 @@
       const created = await api.post<Branch>('/api/branches', {
         name: createForm.name.trim(),
         address: createForm.address.trim() || null,
+        latitude: createForm.latitude ? Number(createForm.latitude) : null,
+        longitude: createForm.longitude ? Number(createForm.longitude) : null,
       });
       branches = [created, ...branches];
       showCreate = false;
-      createForm = { name: '', address: '' };
+      createForm = { name: '', address: '', latitude: '', longitude: '' };
     } catch (e) {
       createErr = (e as Error).message;
     } finally {
@@ -139,6 +197,7 @@
       <h1 class="page-title">Branches</h1>
       <p class="page-sub">Manage office locations and assigned inventory by branch.</p>
     </div>
+    {#if can('manage_branches')}
     <div class="header-actions">
       <button class="btn-primary" onclick={() => showCreate = true}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -147,6 +206,7 @@
         Add Branch
       </button>
     </div>
+    {/if}
   </div>
 
   <!-- Stats row -->
@@ -217,12 +277,14 @@
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                       </svg>
                     </button>
+                    {#if can('manage_branches')}
                     <button class="icon-btn" title="Edit" onclick={(e) => openEdit(b, e)}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
                     </button>
+                    {/if}
                   </div>
                 </td>
               </tr>
@@ -242,8 +304,12 @@
 </div>
 
 <!-- Add Branch modal -->
-<Modal bind:open={showCreate} title="Add Branch" maxWidth="400px" onclose={() => (createErr = '')}>
-  <form onsubmit={handleCreate} style="display:contents">
+<svelte:head>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+</svelte:head>
+
+<Modal bind:open={showCreate} title="Add Branch" maxWidth="620px" onclose={() => (createErr = '')}>
+  <form id="create-branch-form" onsubmit={handleCreate}>
     {#if createErr}<div class="form-err">{createErr}</div>{/if}
     <div class="field">
       <label class="field-label">Branch Name <span class="req">*</span></label>
@@ -253,16 +319,38 @@
       <label class="field-label">Address</label>
       <input class="field-input" type="text" placeholder="e.g. Makati, Metro Manila" bind:value={createForm.address} />
     </div>
-    {#snippet footer()}
-      <button type="button" class="btn-ghost" onclick={() => { showCreate = false; createErr = ''; }}>Cancel</button>
-      <button type="submit" class="btn-primary" disabled={creating}>{creating ? 'Saving…' : 'Save Branch'}</button>
-    {/snippet}
+    <div class="field">
+      <label class="field-label">Exact location <span class="opt">(optional)</span></label>
+      <div class="map-search-row">
+        <button type="button" class="btn-ghost" onclick={searchAddress} disabled={searchingAddress}>
+          {searchingAddress ? 'Searching...' : 'Find address on map'}
+        </button>
+        {#if createForm.latitude && createForm.longitude}
+          <span class="coord-hint">{Number(createForm.latitude).toFixed(4)}, {Number(createForm.longitude).toFixed(4)}</span>
+        {/if}
+      </div>
+      {#if showAddressResults}
+        <div class="address-results">
+          {#each addressResults as result}
+            <button type="button" class="address-result" onclick={() => { setCreatePin(Number(result.lat), Number(result.lon), true); showAddressResults = false; }}>
+              {result.display_name}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      <div class="map-picker" bind:this={createMapEl}></div>
+      <span class="field-hint">Philippine addresses only. Search the address, then click or drag the pin to the exact company location.</span>
+    </div>
   </form>
+  {#snippet footer()}
+    <button type="button" class="btn-ghost" onclick={() => { showCreate = false; createErr = ''; }}>Cancel</button>
+    <button type="submit" form="create-branch-form" class="btn-primary" disabled={creating}>{creating ? 'Saving…' : 'Add Branch'}</button>
+  {/snippet}
 </Modal>
 
 <!-- Edit Branch modal -->
 <Modal bind:open={showEdit} title="Edit Branch" maxWidth="400px" onclose={() => (editErr = '')}>
-  <form onsubmit={handleUpdate} style="display:contents">
+  <form id="edit-branch-form" onsubmit={handleUpdate}>
     {#if editErr}<div class="form-err">{editErr}</div>{/if}
     <div class="field">
       <label class="field-label">Branch Name <span class="req">*</span></label>
@@ -282,11 +370,11 @@
         <input class="field-input" type="number" step="any" placeholder="e.g. 123.8854" bind:value={editForm.longitude} />
       </div>
     </div>
-    {#snippet footer()}
-      <button type="button" class="btn-ghost" onclick={() => { showEdit = false; editErr = ''; }}>Cancel</button>
-      <button type="submit" class="btn-primary" disabled={editing}>{editing ? 'Saving…' : 'Save Changes'}</button>
-    {/snippet}
   </form>
+  {#snippet footer()}
+    <button type="button" class="btn-ghost" onclick={() => { showEdit = false; editErr = ''; }}>Cancel</button>
+    <button type="submit" form="edit-branch-form" class="btn-primary" disabled={editing}>{editing ? 'Saving…' : 'Save Changes'}</button>
+  {/snippet}
 </Modal>
 
 <style>
@@ -365,9 +453,17 @@
   .form-err { font-size: 12.5px; color: var(--error); background: var(--error-soft); border-radius: var(--r-sm); padding: 8px 12px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field-label { font-size: 12.5px; font-weight: 500; color: var(--body); font-family: var(--font-sans); }
+  .opt, .field-hint { font-size: 11.5px; color: var(--mute); font-weight: 400; }
   .req { color: var(--error); }
   .field-input { height: 34px; padding: 0 10px; border: 1px solid var(--hairline); border-radius: var(--r-sm); background: var(--canvas); color: var(--ink); font-size: 13.5px; font-family: var(--font-sans); outline: none; width: 100%; }
   .field-input:focus { border-color: var(--link); box-shadow: 0 0 0 3px var(--link-bg-soft); }
+  .map-search-row { display: flex; align-items: center; gap: 10px; }
+  .coord-hint { font: 11px var(--font-mono); color: var(--mute); }
+  .map-picker { height: 240px; border: 1px solid var(--hairline); border-radius: var(--r-sm); overflow: hidden; }
+  .address-results { max-height: 140px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: var(--r-sm); }
+  .address-result { display: block; width: 100%; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); font: 12px var(--font-sans); text-align: left; cursor: pointer; }
+  .address-result:last-child { border-bottom: 0; }
+  .address-result:hover { background: var(--canvas-soft-2); }
 
   @media (max-width: 900px) { .stats-row { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .stats-row { grid-template-columns: 1fr; } }
