@@ -108,6 +108,7 @@ model Branch {
   createdAt  DateTime     @default(now())
   assets     Asset[]
   employees  Employee[]
+  departments Department[]
   users      SystemUser[]
   intakeDrafts ComputerIntakeDraft[]
   featureOverrides FeatureRolloutBranch[]
@@ -151,11 +152,14 @@ model FeatureRolloutBranch {
 model Department {
   id         String     @id @default(cuid())
   name       String
+  branchId   String
   archivedAt DateTime?
   createdAt  DateTime   @default(now())
+  branch     Branch     @relation(fields: [branchId], references: [id])
   employees  Employee[]
 
   @@index([archivedAt])
+  @@index([branchId])
 }
 
 model Category {
