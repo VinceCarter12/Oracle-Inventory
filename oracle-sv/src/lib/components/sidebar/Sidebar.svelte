@@ -63,6 +63,7 @@
       label: 'Organization',
       items: [
         { id: 'employees', label: 'Employees', icon: 'users',    href: '/employees', permission: 'view_inventory' },
+        { id: 'departments', label: 'Departments', icon: 'users', href: '/departments', permission: 'view_inventory' },
         { id: 'branches',  label: 'Branches',  icon: 'building', href: '/branches',  permission: 'view_inventory' },
       ],
     },
