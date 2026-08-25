@@ -149,10 +149,13 @@ model FeatureRolloutBranch {
 }
 
 model Department {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  employees Employee[]
+  id         String     @id @default(cuid())
+  name       String
+  archivedAt DateTime?
+  createdAt  DateTime   @default(now())
+  employees  Employee[]
+
+  @@index([archivedAt])
 }
 
 model Category {
