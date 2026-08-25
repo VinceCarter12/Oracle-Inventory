@@ -48,13 +48,12 @@
   let submitting = $state(false);
   let submitErr  = $state('');
 
-  // ── Computer / Laptop specifications — shown inline whenever the selected
-  //    Category is a desktop/laptop/computer category. Not a separate mode:
-  //    same form, same Save Asset button, one submit path. ────────────────────
-  const selectedCategory = $derived(categories.find((c) => c.id === categoryId));
-  const isComputerCategory = $derived(isComputerCategoryName(selectedCategory?.name));
+  // ── Computer / Laptop specifications — always part of the one Add Asset
+  //    form, not gated behind a category pick or a mode. Filling in any of
+  //    these fields is what decides, at submit time, whether this asset is
+  //    saved through the computer-intake path (which also creates a device
+  //    profile) or the plain asset path. ─────────────────────────────────────
   const computerAllowed = $derived(can('create_inventory') && ['admin', 'super_admin'].includes((authStore.user?.role ?? '').trim().toLowerCase()));
-  const computerForbidden = $derived(isComputerCategory && !computerAllowed);
 
   type CiComponent = { type: 'ram' | 'storage'; slotOrBay?: string; brand?: string; model?: string; serialNumber?: string; capacity?: string; storageKind?: string };
   let assetTag         = $state('');
@@ -70,6 +69,12 @@
   let employeeId        = $state('');
   let components         = $state<CiComponent[]>([]);
   let employees          = $state<EmployeeOption[]>([]);
+
+  const hasComputerSpecs = $derived(Boolean(
+    assetTag.trim() || computerName.trim() || brand.trim() || model.trim() ||
+    processor.trim() || motherboard.trim() || operatingSystem.trim() || osVersion.trim() ||
+    osInstallDate || employeeId || components.length > 0,
+  ));
 
   // Duplicate-name is a soft warning (backend still allows the save); an
   // in-use asset tag is a hard block. Both surface inline — no separate
@@ -90,8 +95,8 @@
       api.get<Branch[]>('/api/branches').catch(() => []),
     ]);
     // Old /assets/add/computer bookmarks redirect here with ?type=computer —
-    // pre-select the first computer/laptop category so they still land
-    // somewhere useful instead of a blank generic form.
+    // pre-select the first computer/laptop category as a convenience; it no
+    // longer gates anything, the specs fields are already on this page.
     if ($page.url.searchParams.get('type') === 'computer' && !categoryId) {
       const computerCategory = categories.find((c) => isComputerCategoryName(c.name));
       if (computerCategory) categoryId = computerCategory.id;
@@ -99,11 +104,11 @@
   });
 
   $effect(() => {
-    if (isComputerCategory && ownership !== 'company') ownership = 'company';
+    if (hasComputerSpecs && ownership !== 'company') ownership = 'company';
   });
 
   $effect(() => {
-    if (!isComputerCategory || !branchId || !computerAllowed) { employees = []; return; }
+    if (!branchId || !computerAllowed) { employees = []; return; }
     api.get<{ employees: EmployeeOption[] }>(`/api/computer-intake/lookups?branchId=${encodeURIComponent(branchId)}`)
       .then((res) => { employees = res.employees; })
       .catch(() => { employees = []; });
@@ -145,8 +150,8 @@
   }
 
   async function submitComputerAsset() {
-    if (computerForbidden) throw new Error('You need Admin or Super Admin access with inventory creation permission to add computer/laptop assets.');
-    if (!branchId) throw new Error('Branch is required for computer/laptop assets.');
+    if (!computerAllowed) throw new Error('You need Admin or Super Admin access with inventory creation permission to save specifications.');
+    if (!branchId) throw new Error('Branch is required when specifications are filled in.');
 
     if (pendingDuplicateConfirm && pendingDraftId) {
       await api.post(`/api/computer-intake/drafts/${pendingDraftId}/submit`, { expectedUpdatedAt: pendingDraftVersion }, { 'Idempotency-Key': `computer-intake-${pendingDraftId}-${pendingDraftVersion}` });
@@ -183,7 +188,7 @@
     if (!assetName.trim()) { submitErr = 'Asset name is required.'; return; }
     submitting = true; submitErr = '';
     try {
-      if (isComputerCategory) {
+      if (hasComputerSpecs || pendingDuplicateConfirm) {
         await submitComputerAsset();
         if (pendingDuplicateConfirm) { submitting = false; return; } // duplicate warning shown — wait for confirm click
       } else {
@@ -377,12 +382,12 @@
               </div>
               <div class="field">
                 <label class="field-label" for="ownership">Ownership</label>
-                <select id="ownership" class="field-select" bind:value={ownership} disabled={isComputerCategory}>
+                <select id="ownership" class="field-select" bind:value={ownership} disabled={hasComputerSpecs}>
                   {#each OWNERSHIPS as o}
                     <option value={o.value}>{o.label}</option>
                   {/each}
                 </select>
-                {#if isComputerCategory}<span class="field-hint">Computer/laptop assets are company-owned only.</span>{/if}
+                {#if hasComputerSpecs}<span class="field-hint">Assets with specifications filled in are company-owned only.</span>{/if}
               </div>
 
               <!-- Row 3 -->
@@ -430,22 +435,20 @@
         </div>
       </section>
 
-      <!-- ── Computer / Laptop Specifications — shown only when the selected
-           Category is a desktop/laptop/computer category. Same form, same
-           Save Asset button as every other category. ─────────────────────── -->
-      {#if isComputerCategory}
-        {#if computerForbidden}
-          <section class="card" aria-label="Computer specifications unavailable">
-            <div class="card-body">
-              <p class="page-subtitle">You need Admin or Super Admin access with inventory creation permission to add computer/laptop assets.</p>
-            </div>
-          </section>
-        {:else}
-          <section class="card" aria-label="Computer specifications">
-            <div class="card-header">
-              <h2 class="card-title">Computer / Laptop Specifications</h2>
-            </div>
-            <div class="card-body">
+      <!-- ── Computer / Laptop Specifications — always part of the one form.
+           Fill any of these in and Save Asset routes through the
+           computer-intake path instead of the plain asset path; leave them
+           all blank and it's a regular asset. ─────────────────────────────── -->
+      <section class="card" aria-label="Computer specifications">
+        <div class="card-header">
+          <h2 class="card-title">Computer / Laptop Specifications</h2>
+          <span class="card-title-hint">Optional — fill in to save this as a computer/laptop with a device profile</span>
+        </div>
+        <div class="card-body">
+          {#if !computerAllowed}
+            <p class="page-subtitle" style="margin-bottom: 12px;">You need Admin or Super Admin access with inventory creation permission to save specifications.</p>
+          {/if}
+          <fieldset class="specs-fieldset" disabled={!computerAllowed}>
               <div class="fields-grid">
                 <div class="field">
                   <label class="field-label" for="ci-tag">Asset Tag</label>
@@ -526,10 +529,9 @@
                   </div>
                 {/each}
               </div>
-            </div>
-          </section>
-        {/if}
-      {/if}
+          </fieldset>
+        </div>
+      </section>
 
       <!-- ── Card 2: Additional Details ───────────────────────────────────────── -->
       <section class="card" aria-label="Additional details">
@@ -690,6 +692,23 @@
     color: var(--ink);
     font-family: var(--font-sans);
     letter-spacing: -0.2px;
+  }
+
+  .card-title-hint {
+    font-size: 12px;
+    color: var(--mute);
+    font-family: var(--font-sans);
+  }
+
+  .specs-fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .specs-fieldset:disabled {
+    opacity: 0.55;
   }
 
   /* ── Card main (image + fields side-by-side) ────────────────────────────── */
