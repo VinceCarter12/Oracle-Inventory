@@ -3,10 +3,37 @@
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
 
+  const CATEGORY_OPTIONS = [
+    { value: 'hand_tools', label: 'Hand tools' },
+    { value: 'power_tools', label: 'Power tools' },
+    { value: 'cables_connectors', label: 'Cables & connectors' },
+    { value: 'electrical_supplies', label: 'Electrical supplies' },
+    { value: 'consumables', label: 'Consumables' },
+    { value: 'safety_ppe', label: 'Safety & PPE' },
+    { value: 'spare_parts', label: 'Spare parts / accessories' },
+    { value: 'cleaning_supplies', label: 'Cleaning supplies' },
+    { value: 'other', label: 'Other' }
+  ];
+  const UNIT_OPTIONS = [
+    { value: 'piece', label: 'Piece' },
+    { value: 'box', label: 'Box' },
+    { value: 'pack', label: 'Pack' },
+    { value: 'set', label: 'Set' },
+    { value: 'pair', label: 'Pair' },
+    { value: 'roll', label: 'Roll' },
+    { value: 'meter', label: 'Meter' },
+    { value: 'liter', label: 'Liter' },
+    { value: 'bottle', label: 'Bottle' },
+    { value: 'kilogram', label: 'Kilogram' },
+    { value: 'other', label: 'Other' }
+  ];
+
   let sku = $state('');
   let name = $state('');
-  let category = $state('tools');
+  let category = $state('hand_tools');
+  let categoryOther = $state('');
   let unitOfMeasure = $state('piece');
+  let unitOfMeasureOther = $state('');
   let description = $state('');
   let isSerialized = $state(false);
   let saving = $state(false);
@@ -15,7 +42,9 @@
 
   async function submit() {
     error = '';
-    if (!sku.trim() || !name.trim() || !category.trim() || !unitOfMeasure.trim()) {
+    const resolvedCategory = category === 'other' ? categoryOther.trim() : category;
+    const resolvedUnit = unitOfMeasure === 'other' ? unitOfMeasureOther.trim() : unitOfMeasure;
+    if (!sku.trim() || !name.trim() || !resolvedCategory || !resolvedUnit) {
       error = 'SKU, item name, category, and unit of measure are required.';
       return;
     }
@@ -25,8 +54,8 @@
       await api.post('/api/stock/items', {
         sku: sku.trim(),
         name: name.trim(),
-        category: category.trim(),
-        unitOfMeasure: unitOfMeasure.trim(),
+        category: resolvedCategory,
+        unitOfMeasure: resolvedUnit,
         description: description.trim() || undefined,
         isSerialized
       }, { 'Idempotency-Key': idempotencyKey });
@@ -60,8 +89,20 @@
       <input id="name" bind:value={name} maxlength="160" />
 
       <div class="two-up">
-        <div><label for="category">Category <span aria-hidden="true">*</span></label><input id="category" bind:value={category} maxlength="80" /></div>
-        <div><label for="unit">Unit of measure <span aria-hidden="true">*</span></label><input id="unit" bind:value={unitOfMeasure} maxlength="40" /></div>
+        <div>
+          <label for="category">Category <span aria-hidden="true">*</span></label>
+          <select id="category" bind:value={category}>
+            {#each CATEGORY_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
+          </select>
+          {#if category === 'other'}<input class="other-input" bind:value={categoryOther} placeholder="Enter category" maxlength="80" />{/if}
+        </div>
+        <div>
+          <label for="unit">Unit of measure <span aria-hidden="true">*</span></label>
+          <select id="unit" bind:value={unitOfMeasure}>
+            {#each UNIT_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
+          </select>
+          {#if unitOfMeasure === 'other'}<input class="other-input" bind:value={unitOfMeasureOther} placeholder="Enter unit" maxlength="40" />{/if}
+        </div>
       </div>
 
       <label class="check"><input type="checkbox" bind:checked={isSerialized} /> This stock is serialized</label>
@@ -70,7 +111,7 @@
       <textarea id="description" bind:value={description} rows="4" maxlength="1000"></textarea>
 
       {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <div class="actions"><a href="/stock">Cancel</a><button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Create stock item'}</button></div>
+      <div class="actions"><button type="button" class="ghost" onclick={() => goto('/stock')}>Cancel</button><button type="submit" class="primary" disabled={saving}>{saving ? 'Saving…' : 'Create stock item'}</button></div>
     </form>
   {/if}
 </div>
@@ -80,11 +121,18 @@
   .back { color: var(--body); text-decoration: none; font-size: 14px; }
   header { margin: 24px 0; } .eyebrow { margin: 0 0 5px; color: var(--mute); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
   h1 { margin: 0; color: var(--ink); font-size: 32px; letter-spacing: -.035em; } header p:last-child { color: var(--body); margin-bottom: 0; }
-  .card, .notice { border: 1px solid var(--hairline); border-radius: 12px; background: var(--canvas); padding: 24px; }
-  label { display: block; margin: 18px 0 6px; color: var(--ink); font-size: 14px; font-weight: 650; }
-  input:not([type='checkbox']), textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--hairline); border-radius: 8px; padding: 10px 12px; color: var(--ink); background: var(--canvas); font: inherit; }
-  textarea { resize: vertical; } .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .two-up label { margin-top: 18px; }
-  .check { display: flex; gap: 9px; align-items: center; font-weight: 500; } .check input { inline-size: 16px; block-size: 16px; }
-  .optional { color: var(--mute); font-weight: 400; } .error { color: var(--error); margin: 18px 0 0; } .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 24px; } .actions a { color: var(--body); text-decoration: none; } button { border: 0; border-radius: 8px; padding: 10px 14px; background: var(--ink); color: var(--on-primary); font: inherit; font-weight: 600; cursor: pointer; } button:disabled { cursor: wait; opacity: .55; }
+  .card, .notice { border: 1px solid var(--hairline); border-radius: 10px; background: var(--canvas); padding: 22px; }
+  label { display: block; margin: 18px 0 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
+  input:not([type='checkbox']), select, textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--hairline); border-radius: 7px; padding: 9px; min-height: 36px; color: var(--ink); background: var(--canvas); font: inherit; }
+  .other-input { margin-top: 8px; }
+  textarea { min-height: 80px; resize: vertical; } .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; } .two-up label { margin-top: 18px; }
+  .check { display: flex; gap: 9px; align-items: center; font-weight: 500; margin-top: 18px; } .check input { inline-size: 16px; block-size: 16px; }
+  .optional { color: var(--mute); font-weight: 400; } .error { color: var(--error); margin: 18px 0 0; }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  button { font: inherit; border: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); border-radius: 7px; padding: 8px 13px; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+  .primary { background: var(--ink); color: var(--on-primary); border-color: var(--ink); }
+  .ghost { background: transparent; }
+  button:disabled { cursor: wait; opacity: .55; }
   @media (max-width: 640px) { .page { padding: 24px 16px; } .two-up { grid-template-columns: 1fr; gap: 0; } .actions { justify-content: space-between; } }
 </style>
