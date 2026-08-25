@@ -108,16 +108,16 @@ async function main() {
 
   // ─── Departments ──────────────────────────────────────────────────────────
   const departments = [
-    { id: "dept-it",          name: "IT" },
-    { id: "dept-accounting",  name: "Accounting" },
-    { id: "dept-operations",  name: "Operations" },
-    { id: "dept-hr",          name: "HR" },
+    { id: "dept-it",          name: "IT",          branchId: "branch-cubao" },
+    { id: "dept-accounting",  name: "Accounting",  branchId: "branch-cubao" },
+    { id: "dept-operations",  name: "Operations",  branchId: "branch-cubao" },
+    { id: "dept-hr",          name: "HR",          branchId: "branch-cubao" },
   ];
   for (const d of departments) {
     await prisma.department.upsert({
       where:  { id: d.id },
-      update: { name: d.name },
-      create: { id: d.id, name: d.name },
+      update: { name: d.name, branchId: d.branchId },
+      create: { id: d.id, name: d.name, branchId: d.branchId },
     });
   }
   console.log("✓ Departments: IT, Accounting, Operations, HR");

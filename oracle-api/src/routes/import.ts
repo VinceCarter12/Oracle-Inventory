@@ -704,11 +704,23 @@ router.post(
       const allDepts = await prisma.department.findMany({ select: { id: true, name: true } });
       for (const d of allDepts) deptCache.set(d.name.toLowerCase(), d.id);
     }
+    // Departments now require a branch. Fall back to the import's own branch (or the
+    // earliest-created active branch) when a row doesn't resolve to one.
+    let fallbackBranchId: string | null = null;
 
-    async function resolveDepartment(name: string): Promise<string> {
+    async function resolveDepartment(name: string, rowBranchId: string | null): Promise<string> {
       const key = name.toLowerCase();
       if (deptCache.has(key)) return deptCache.get(key)!;
-      const created = await prisma.department.create({ data: { name } });
+      let deptBranchId = rowBranchId;
+      if (!deptBranchId) {
+        if (!fallbackBranchId) {
+          const defaultBranch = await prisma.branch.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true } });
+          if (!defaultBranch) throw new Error("Cannot create a department without an active branch to assign it to.");
+          fallbackBranchId = defaultBranch.id;
+        }
+        deptBranchId = fallbackBranchId;
+      }
+      const created = await prisma.department.create({ data: { name, branchId: deptBranchId } });
       deptCache.set(key, created.id);
       return created.id;
     }
@@ -752,7 +764,7 @@ router.post(
         resolvedEmployees.set(row.rowIndex, emp.id);
         // Non-destructive upsert: fill in any fields that are currently null
         const rowBranchId    = rowBranchOverrides[row.rowIndex] ?? branchId ?? null;
-        const resolvedDeptId = empDeptName ? await resolveDepartment(empDeptName) : null;
+        const resolvedDeptId = empDeptName ? await resolveDepartment(empDeptName, rowBranchId) : null;
         const upsertData: Record<string, unknown> = {};
         if (!emp.phone        && empPhone)       upsertData.phone        = empPhone;
         if (!emp.departmentId && resolvedDeptId) upsertData.departmentId = resolvedDeptId;
@@ -798,7 +810,7 @@ router.post(
             if (emp) {
               resolvedEmployees.set(row.rowIndex, emp.id);
               const rowBranchId2    = rowBranchOverrides[row.rowIndex] ?? branchId ?? null;
-              const resolvedDeptId2 = empDeptName ? await resolveDepartment(empDeptName) : null;
+              const resolvedDeptId2 = empDeptName ? await resolveDepartment(empDeptName, rowBranchId2) : null;
               const upsertData2: Record<string, unknown> = {};
               if (!emp.phone        && empPhone)        upsertData2.phone        = empPhone;
               if (!emp.departmentId && resolvedDeptId2) upsertData2.departmentId = resolvedDeptId2;
@@ -817,7 +829,7 @@ router.post(
       // Auto-create employee (record only — no SystemUser, no mailbox)
       if (autoCreateEmployees && (ref || email)) {
         const rowBranchId    = rowBranchOverrides[row.rowIndex] ?? branchId ?? null;
-        const resolvedDeptId = empDeptName ? await resolveDepartment(empDeptName) : null;
+        const resolvedDeptId = empDeptName ? await resolveDepartment(empDeptName, rowBranchId) : null;
         const created = await prisma.employee.create({
           data: {
             name:         resolvedName,
