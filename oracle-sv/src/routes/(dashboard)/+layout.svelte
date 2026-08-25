@@ -35,9 +35,9 @@
 
 {#if authenticated}
 <div class="app-shell">
-  <!-- Mobile top bar — only visible on small screens -->
+  <!-- Compact top bar — visible on tablet and smaller screens -->
   <div class="mobile-topbar">
-    <button class="hamburger" onclick={() => mobileSidebarOpen = true} aria-label="Open menu">
+    <button class="hamburger" onclick={() => mobileSidebarOpen = true} aria-label="Open menu" aria-expanded={mobileSidebarOpen} aria-controls="main-sidebar">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
@@ -76,7 +76,8 @@
     display: none;
   }
 
-  @media (max-width: 767px) {
+  /* iPad/tablet: keep the content usable by turning the sidebar into a drawer. */
+  @media (max-width: 1023px) {
     .app-shell {
       flex-direction: column;
     }

@@ -105,7 +105,7 @@
   // Untrusted uploaded HTML — render only in a fully sandboxed iframe
   async function viewRaw() {
     try {
-      const res = await fetch(`/api/hardware-audit/scans/${scanId}/raw`, {
+      const res = await api.raw(`/api/hardware-audit/scans/${scanId}/raw`, {
         headers: { Authorization: `Bearer ${authStore.token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

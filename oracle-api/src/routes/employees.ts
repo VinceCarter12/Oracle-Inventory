@@ -56,6 +56,10 @@ router.post("/", requirePermission("manage_stock"), async (req: AuthRequest, res
   const { name, email, phone, employeeId, branchId, departmentId, position } = req.body;
   if (!name) { res.status(400).json({ error: "Employee name is required." }); return; }
   if (!employeeId) { res.status(400).json({ error: "Employee ID is required." }); return; }
+  if (departmentId) {
+    const department = await prisma.department.findUnique({ where: { id: departmentId }, select: { archivedAt: true } });
+    if (!department || department.archivedAt) { res.status(400).json({ error: "Department must be an active department." }); return; }
+  }
 
   const employee = await prisma.employee.create({
     data: {
@@ -82,6 +86,10 @@ router.put("/:id", requirePermission("manage_stock"), async (req: AuthRequest, r
 
   const existing = await prisma.employee.findUnique({ where: { id: req.params.id } });
   if (!existing) { res.status(404).json({ error: "Employee not found" }); return; }
+  if (departmentId) {
+    const department = await prisma.department.findUnique({ where: { id: departmentId }, select: { archivedAt: true } });
+    if (!department || department.archivedAt) { res.status(400).json({ error: "Department must be an active department." }); return; }
+  }
 
   const employee = await prisma.employee.update({
     where: { id: req.params.id },

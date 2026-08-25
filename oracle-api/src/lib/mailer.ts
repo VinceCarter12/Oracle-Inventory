@@ -1,15 +1,18 @@
 import { Resend } from "resend";
 import crypto from "crypto";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 // On the free tier without a verified domain, use "onboarding@resend.dev".
 // Once oraclepetroleum.net is verified in Resend, change this to your real address.
 const FROM = process.env.EMAIL_FROM ?? "onboarding@resend.dev";
 const APP_URL = process.env.APP_URL ?? "http://localhost:5174";
 
 async function send(opts: { to: string; subject: string; html: string }): Promise<void> {
-  const { error } = await resend.emails.send({ from: FROM, ...opts });
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("Email delivery is not configured. Set RESEND_API_KEY before sending emails.");
+  }
+
+  const { error } = await new Resend(apiKey).emails.send({ from: FROM, ...opts });
   if (error) throw new Error(error.message);
 }
 

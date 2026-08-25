@@ -3,13 +3,13 @@
 > **Version**: 2.0 (updated 2026-06-28 to reflect actual codebase state)
 > **Project**: Oracle Inventory
 > **Repository**: [github.com/VinceCarter12/Oracle-Inventory](https://github.com/VinceCarter12/Oracle-Inventory)
-> **Live Domain**: `oracleinventory.lubesmastery.com` (Hostinger FTP — legacy; SvelteKit adapter TBD)
+> **Live Domain**: `oracleinventory.lubesmastery.com` (legacy Hostinger FTP; new deploy target is **Vercel**, see [[Decisions/2026-07-27-vercel-over-hostinger-deploy]])
 
 ---
 
 ## 1. Product Vision
 
-Oracle Inventory is a **web-based asset tracking system** for organizations that manage physical equipment (laptops, monitors, peripherals) across multiple branches and employees. V2 adds multi-user RBAC, OTP auth, bulk import, QR/barcode scanning, and a full audit trail.
+Oracle Inventory is a **web-based asset tracking system** for organizations that manage physical equipment (laptops, monitors, peripherals) across multiple branches and employees. V2 adds multi-user RBAC, OTP auth, QR/barcode scanning, and a full audit trail. Bulk import was removed by owner decision on 2026-08-02.
 
 ### Target Users
 
@@ -77,7 +77,7 @@ Defined in `oracle-api/prisma/schema.prisma` — **16 models, 10 enums**.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Asset` | Physical equipment | name, serialNumber, categoryId, branchId, status (active/lost/stolen), condition, ownership, assetTag, importId |
+| `Asset` | Physical equipment | name, serialNumber, categoryId, branchId, status (active/lost/stolen), condition, ownership, assetTag |
 | `AssetAssignment` | Employee → Asset | assetId, employeeId, status (active/returned/transferred/pending_return), returnRequestedAt |
 | `Category` | Asset type | name |
 
@@ -99,11 +99,7 @@ Defined in `oracle-api/prisma/schema.prisma` — **16 models, 10 enums**.
 
 ### Import System
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `ImportHistory` | Bulk upload job | fileName, totalRows, importedRows, failedRows, status, strictMode |
-| `ImportRow` | Per-row result | rawData, mappedData, outcome, assetId, errorMessage, isDuplicate |
-| `ColumnMappingPreset` | Saved column mappings | name, mappings (JSON), isShared |
+Bulk upload/import was removed on 2026-08-02. The current code no longer carries import UI/API/schema responsibility; a forward-only Supabase migration exists for the next database account and was not applied to the current test DB.
 
 ### Scan System
 
@@ -118,6 +114,22 @@ Defined in `oracle-api/prisma/schema.prisma` — **16 models, 10 enums**.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `HardwareScan` | Belarc scan (doubles as baseline) | assetId, submittedById, rawHtml, parsedSpecs (JSON), isBaseline, comparisonResult (JSON), overallStatus, status, reviewedById |
+
+### Planned Expansion Models
+
+The workbook-driven expansion is approved as a vault plan, not implemented. See [[Planning/Inventory-Field-Dictionary]], [[Planning/Pages/Inventory-Intake]], and [[Decisions/2026-08-22-manual-primary-belarc-assisted-intake]].
+
+| Concept | Purpose |
+|---|---|
+| `DeviceProfile` | Computer/server specifications separate from generic asset identity |
+| `AssetComponent` | Repeatable RAM, drive, monitor, dock, and peripheral records |
+| `NetworkInterface` | MAC/IP/subnet/gateway/DNS/VLAN observations and official fields |
+| `NetworkPort` / `PortConnection` | Switch, AP, NVR, camera, and server topology relationships |
+| `CctvCamera` / `NvrChannel` | Camera location and recorder-channel mapping |
+| `IspCircuit` | ISP, modem, speed, static/dynamic addressing, circuit metadata |
+| `ToolInventory` | Quantity-only tools/stock distinct from serialized assets |
+| `InventoryObservation` | Manual/Belarc evidence before official acceptance |
+| `SecretReference` | Secret-reference metadata only; raw credentials rejected |
 
 ### Enums
 
@@ -173,9 +185,9 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | `/assets/[id]` | ✅ Done | Asset detail + assignment history |
 | `/assets/add` | ✅ Done | New asset form |
 | `/assets/scan` | ✅ Done | QR/barcode scanner (mobile-optimized, Tesseract OCR) |
-| `/assets/import` | ✅ Done | Excel/CSV bulk import UI |
-| `/assets/import/history` | ✅ Done | Import job history list |
-| `/assets/import/history/[id]` | ✅ Done | Import job detail + conflict resolution |
+| `/assets/import` | Removed | Bulk upload removed 2026-08-02 |
+| `/assets/import/history` | Removed | Import history UI removed 2026-08-02 |
+| `/assets/import/history/[id]` | Removed | Import detail/conflict UI removed 2026-08-02 |
 | `/employees` | ✅ Done | Employee list with working filter dropdowns |
 | `/employees/[id]` | ✅ Done | Employee profile + assigned assets |
 | `/assignments` | ✅ Done | Assignments table with return workflow |
@@ -188,7 +200,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | `/users/[id]` | ✅ Done | User detail/edit |
 | `/reports` | ❌ Removed | Deleted 2026-07-03 per ADR — metrics merged into `/dashboard`, Export CSV in dashboard header |
 | `/settings` | ✅ Done | Workspace, Integrations, Security tabs |
-| `/activity` | 🔶 Scaffolded | Activity log viewer — backend done, frontend minimal |
+| `/activity` | ✅ Done | Activity log viewer — filters (entity/action/date range), pagination, real backend data |
 | `/hardware-audit/upload` | ✅ Done | Belarc scan upload — 3-step flow w/ dry-run parse + comparison preview |
 | `/hardware-audit` | ✅ Done | Admin scan review queue — filters, summary chips, pagination |
 | `/hardware-audit/[scanId]` | ✅ Done | Baseline vs scan comparison detail + review actions |
@@ -216,8 +228,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **roles** | Full CRUD (role + permission matrix) | ✅ Done |
 | **turnover** | POST /, GET /:id, PUT /:id/return, PUT /:id/approve, GET /pending | ✅ Done |
 | **scan** | POST /room, GET /room/:roomCode, POST /device/connect, POST /result | ✅ Done |
-| **import** | Bulk upload, history, failed rows, column mapping presets, templates | ✅ Done |
-| **activity** | GET /, /by-entity/:entity/:entityId, /by-user/:userId | ✅ Done |
+| **activity** | GET / (filters: entity/action/from/to, paginated), GET /entities | ✅ Done |
 | **maintenance** | Full CRUD + cron scheduler on startup | ✅ Done |
 | **reports** | GET /dashboard, /utilization, /by-branch, /by-department | ✅ Done |
 | **lookup** | GET /employees, /assets, /branches, /departments, /categories | ✅ Done |
@@ -263,7 +274,7 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [x] Create/edit asset form
 - [x] Lost/stolen reporting + recovery workflow
 - [x] OCR scan page (Tesseract.js, camera + upload modes, duplicate detection)
-- [x] Excel/CSV bulk import (conflict resolution, column mapping presets, import history)
+- [x] Remove Excel/CSV bulk import UI/API/schema after owner decision on 2026-08-02; actual assets and activity logs preserved
 
 ### Phase 5 — People & Assignments ✅ COMPLETE
 - [x] Employees page with working filter dropdowns
@@ -287,15 +298,14 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [x] First-login onboarding page
 - [x] Settings page OTP flows (email/password change)
 
-### Phase 8 — Reports & Activity Log 🔶 IN PROGRESS
+### Phase 8 — Reports & Activity Log ✅ COMPLETE
 - [x] Report aggregate endpoints (dashboard, utilization, by-branch, by-department)
 - [x] Reports page scaffolded (`/reports`, `/reports/[id]`)
 - [x] **Wire reports UI to backend data** — filters (branch, category, date range) refetch summary; CSV/PDF export working on both index and detail pages; 3 missing reports added to table (by-branch, employee-ownership, site-utilization)
 - [x] Dashboard WIP committed — ChartBar, ChartDonut, SectionCard components; permission-safe activity fetch
 - [x] `/api/reports/summary` — now accepts `branchId`, `categoryId`, `from`, `to` query params
 - [x] Activity log backend (`/api/activity`)
-- [x] Activity log page scaffolded (`/activity`)
-- [ ] **Wire activity log UI to backend data**
+- [x] **Wire activity log UI to backend data** ✅ verified 2026-07-06 — was already fully wired (filters, pagination, real data), docs had never been updated to reflect it; confirmed live in browser
 
 ### Phase 9 — Scan System 🔶 IN PROGRESS
 - [x] Scan backend (rooms, devices, results)
@@ -314,11 +324,13 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 - [x] Phase E: Exit check block on employee offboarding ✅ 2026-07-06 — enrolled assets need a reviewed scan before any return path completes (approve-return, direct return, turnover); 409 with actionable message
 
 ### Phase 11 — Deployment 🔲 NOT STARTED
-- [ ] Choose SvelteKit adapter (`adapter-node` for self-hosted or `adapter-vercel`)
+- [x] Choose SvelteKit adapter — **`adapter-vercel`**, decided 2026-07-27, Hostinger dropped ([[Decisions/2026-07-27-vercel-over-hostinger-deploy]])
+- [ ] Install/configure `@sveltejs/adapter-vercel` in `oracle-sv`
 - [ ] Configure production environment variables
-- [ ] Set up PostgreSQL on production host
-- [ ] Deploy API to hosting (VPS or Hostinger)
-- [ ] Deploy frontend
+- [ ] Set up PostgreSQL on production host (Neon — unaffected by frontend host choice)
+- [ ] Approve `oracle-api` host — Render Web Service recommended; Railway is the fallback
+- [ ] Deploy frontend to Vercel
+- [ ] Decide domain: repoint `oracleinventory.lubesmastery.com` or use Vercel-issued domain
 - [ ] Verify OTP email on production Gmail account
 - [ ] Revert any dev/test values (see Deployment TODOs memory)
 
@@ -333,17 +345,18 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | **Auth (JWT)** | ✅ Complete — login, session guard, logout |
 | **Auth (OTP)** | ✅ Backend complete — frontend flows wired in settings; OTP login page TBD |
 | **RBAC** | ✅ Complete — Role + Permission models, middleware, per-user overrides, UI |
-| **Asset management** | ✅ Complete — CRUD, lost/stolen/recovery, scan, bulk import |
+| **Asset management** | ✅ Complete — CRUD, lost/stolen/recovery, scan; bulk import removed |
 | **Employee management** | ✅ Complete — CRUD, filter dropdowns, detail page |
 | **Assignments** | ✅ Complete — assign, transfer, return, approval flow, turnover |
 | **Branch/Dept management** | ✅ Complete — full CRUD |
 | **Maintenance scheduling** | ✅ Complete — cron + email notifications |
-| **Bulk import** | ✅ Complete — Excel/CSV, conflict resolution, presets, history |
-| **Scan system** | 🔶 Backend done — UI needs wiring |
+| **Bulk import** | Removed — UI/API/schema cleanup prepared; forward-only Supabase migration exists but was not applied to the current test DB |
+| **Scan system** | Suspended — user-facing QR/OCR rollout frozen pending owner decision; code/scaffolds stay in place |
 | **Reports** | ✅ Merged into Dashboard — `/reports` route deleted per ADR; backend endpoints feed dashboard + CSV export |
-| **Activity log** | 🔶 Backend done — UI needs data wiring |
-| **Hardware audit** | ✅ COMPLETE (A–E) — parser, upload/baseline, comparison, review queue, exit-check block on returns |
-| **Deployment** | 🔲 Not started — SvelteKit adapter not chosen |
+| **Activity log** | ✅ Complete — filters, pagination, real backend data |
+| **Hardware audit** | ✅ COMPLETE (A–E) — parser, upload/baseline, comparison, review queue, exit-check block on returns; source merge verified 2026-08-01 with no migration |
+| **Workbook inventory expansion (Phases 1–7)** | 🟡 Phase 7 release controls (`fcb49a9`) and Phase 1 computer intake (`1f6b6a6`) are isolated local commits; Phases 2–6 are local candidates. Release verification and migration/deployment remain pending |
+| **Deployment** | 🟡 Partial — Render API live; Vercel Preview ready; Vercel Production currently failing, so the website is not production-live |
 
 ---
 
@@ -354,13 +367,22 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 | 1 | ~~Wire `/reports` to backend~~ — **DECISION**: Reports merged into Dashboard (see [[Decisions/2026-06-28-reports-merged-into-dashboard]]) | — |
 | 1a | ~~Merge report metrics/charts into `/dashboard` layout~~ ✅ Done 2026-07-03 — all dashboard widgets built (utilization, by-dept, condition trend, movement frequency, assignment history) | — |
 | 1b | ~~Remove `/reports` route from oracle-sv, update sidebar nav~~ ✅ Done 2026-07-03 — route deleted, Export CSV moved to dashboard header | — |
-| 2 | Wire `/activity` log page to backend | Medium |
-| 3 | Wire `/scan/mobile` and `/scan/review` to scan room backend | Medium |
+| 2 | ~~Wire `/activity` log page to backend~~ ✅ Done — was already wired, docs were stale | — |
+| 3 | User-facing QR/OCR Scan System rollout for `/assets/scan`, `/scan/mobile`, and `/scan/review` suspended pending owner decision; do not delete existing code/scaffolds | Deferred |
 | 4 | OTP login flow on frontend (passwordless entry point) | Medium |
-| 5 | Choose SvelteKit adapter + configure deployment | High |
-| 6 | Production env setup + deploy | High |
+| 5 | ~~Choose SvelteKit adapter~~ ✅ Decided 2026-07-27 — Vercel | — |
+| 5a | Promote the pinned Vercel runtime configuration to `main`; centralize API origin and restrict CORS | High |
+| 6 | Establish migrations/restore evidence, run role-based staging smoke tests, then deploy Vercel Production | High |
 | 7 | Advanced map on Branch detail (Mapbox vs Leaflet — still evaluating) | Low |
 | 8 | ~~Hardware Audit feature~~ ✅ ALL phases (A–E) done 2026-07-06 — only email-on-mismatch notification still open (question #2) | — |
+| 9 | Belarc acquisition/discovery due diligence plus workbook-driven device/network/CCTV data dictionary; commercial Belarc corporate licensing remains unconfirmed | High |
+| 10 | Apply the forward-only bulk import removal migration only when provisioning/migrating the next database account | High |
+| 11 | Implement the approved Department UI/API remediation wireframe and validate it locally; keep this separate from the unapplied Department Supabase migration | High |
+| 12 | Isolate Phases 2–6 into focused reviewable commits/PRs; Phase 7 (`fcb49a9`) and Phase 1 (`1f6b6a6`) are already isolated locally, while the shared worktree remains mixed | High |
+| 13 | Keep locally coded Belarc proposals production-disabled until commercial licensing, conflict authority, raw-evidence retention, and baseline separation are approved | High |
+| 14 | Add route-level authorization, idempotency, and concurrency tests for expansion families; Phase 6 static quality gate passed, but integration coverage remains open | High |
+| 15 | Owner-approved staging bypass (2026-08-24): migration-history, Phase 7, Phase 1, and the Phase 6 schema are applied to the unused production target with flags off. Phase 6 is `20260823184250`; its tables are empty with RLS and no public grants, and matching commit `3b816ea` is pushed as `codex/phase6-tools-stock`, but it remains incomplete/unreleased. Review it, record backup/export evidence, then run browser/API role smoke tests before enabling any feature. The exception does not waive restore, security, migration-parity, or rollback gates. | High |
+| 16 | Do not claim Phase 1–7 production release until the focused commits, staging migration, frontend/browser verification, and approved deployment gates are complete | High |
 
 ---
 
@@ -368,10 +390,11 @@ Fully documented in `Design/DESIGN.md` — Vercel-inspired, applied to an invent
 
 | # | Question | Recommendation |
 |---|----------|---------------|
-| 1 | SvelteKit deployment adapter | `adapter-node` for Hostinger VPS; `adapter-vercel` if moving to Vercel |
+| 1 | ~~SvelteKit deployment adapter~~ — **DECISION**: `adapter-vercel`, Hostinger dropped ([[Decisions/2026-07-27-vercel-over-hostinger-deploy]]) | — |
 | 2 | Map library for Branch detail | Leaflet (Nominatim, free) is live; Mapbox adds cost but better UX — decision pending |
 | 3 | OTP login as primary entry point | Add `/otp-login` route once backend confirmed stable on prod |
-| 4 | Scan system rollout | Wire admin review queue first before exposing mobile scan to users |
+| 4 | Scan system rollout | Suspended until a later owner decision; Belarc Hardware Audit remains active and separate |
+| 5 | `oracle-api` production host | **Current**: Render Web Service is live; scheduled maintenance remains in-process and must be separated or lock-protected before horizontal scaling |
 
 ---
 

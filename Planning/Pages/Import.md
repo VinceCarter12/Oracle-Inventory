@@ -1,29 +1,35 @@
 ---
 date: 2026-06-29
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Import — Changes & Features
+# Import — Removed Scope
 
 > Routes: `/assets/import`, `/assets/import/history`, `/assets/import/history/[id]`
-> Status: Core done — UX improvements + bug fixes pending
+> Status: Removed by owner decision on 2026-08-02
+> Task status tracked in: [[Planning/Pages/_Overview#Import]]
 
 ---
 
-## Bug Fixes / Changes
+## Decision
 
-- [x] [Easy] Fix: import preview showing empty rows when required column (name) not mapped — `validateRows` now always runs so `mappedData` is populated; mapping errors are injected per-row on top (`import.ts` parse endpoint)
-- [x] [Medium] Fix: employee first name not detected during bulk upload — added `startsWith` OR clause so single-token refs like "Juan" match "Juan Santos" in DB (`import.ts` ~line 737)
-- [ ] [Easy] Fix: import error messages not specific enough — show which column/row failed and why
+Bulk upload/import is no longer part of Oracle Inventory. Remove all connected UI, backend, schema, templates, mapping presets, history/detail views, and API surface. Do not preserve import job tables for future accounts.
+
+## Preserved Data Boundary
+
+- Keep real `Asset` records.
+- Keep `ActivityLog` records.
+- Do not apply destructive SQL to the current Supabase test database in this cleanup.
+
+## Removal Evidence
+
+- Frontend import routes/navigation/history UI removed.
+- Backend import routes/services/templates removed.
+- Prisma import models/enums/relations removed from source schema.
+- Forward-only Supabase migration created for the next database account.
+- API build and 48 tests passed.
+- Frontend check reported 0 errors with existing warnings.
 
 ---
 
-## New Features
-
-- [ ] [Easy] Drag-and-drop file upload zone (if not already implemented)
-- [ ] [Medium] Pre-import preview table — show all rows before confirming import
-- [ ] [Medium] Per-row status indicators in preview: Duplicate / Skipped / Will Import / Error
-- [ ] [Medium] Skip individual rows before import — checkbox per row to exclude
-- [ ] [Hard] Edit individual rows in preview before import — inline editing in preview table
-- [ ] [Easy] Import progress indicator — show % complete during large imports
-- [ ] [Medium] Re-run failed rows — on import history detail, retry only the failed rows
+[[Home]] | [[Planning/Pages/_Overview]]

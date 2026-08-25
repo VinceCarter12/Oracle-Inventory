@@ -1,29 +1,37 @@
 ---
 date: 2026-06-29
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Activity Log — Changes & Features
+# Activity Log — Spec
 
 > Route: `/activity`
 > Status: Backend done — frontend scaffolded, needs full data wiring
+> Task status tracked in: [[Planning/Pages/_Overview#Activity-Log]]
 
 ---
 
-## Bug Fixes / Changes
+## Data Source
 
-- [ ] [Medium] Wire activity log list to `/api/activity` en dpoint (currently scaffolded/static)
-- [ ] [Medium] Show real timestamps, user names, action types from backend response
+- Endpoint: `/api/activity`
+- Returns: timestamp, user name, action type, entity type, entity ID
+
+## Filter Spec
+
+| Filter | Values |
+|--------|--------|
+| User | Dropdown — any system user |
+| Action type | create, update, delete, assign, return, transfer |
+| Entity type | Asset, Employee, Assignment, Branch, User |
+| Date range | From / To date pickers |
+
+## Rules
+
+- Activity log is **never deleted** — no delete endpoint exposed in UI
+- Archive toggle for logs older than X months (hard — future)
+- Per-asset log on `/assets/[id]` — filter by `entityId`
+- Per-employee log on `/employees/[id]` — filter by employee involvement
 
 ---
 
-## New Features
-
-- [ ] [Medium] Filter by user — dropdown to select a specific user's actions
-- [ ] [Medium] Filter by action type — e.g. "create", "update", "delete", "assign", "return"
-- [ ] [Medium] Filter by entity type — e.g. Asset, Employee, Assignment
-- [ ] [Easy] Date range filter (from / to)
-- [ ] [Easy] Activity log never deleted — confirm API has no delete endpoint exposed to UI
-- [ ] [Hard] Archive old logs — flag logs older than X months as archived, show archive toggle
-- [ ] [Medium] Per-asset activity log on `/assets/[id]` — filter by entityId
-- [ ] [Medium] Per-employee activity log on `/employees/[id]` — show actions involving that employee
+[[Home]] | [[Planning/Pages/_Overview]]

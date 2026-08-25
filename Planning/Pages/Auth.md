@@ -1,25 +1,29 @@
 ---
 date: 2026-06-29
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Auth — Changes & Features
+# Auth — Spec
 
-> Routes: `/login`, `/forgot-password`, `/first-login`, `/otp-login` (new)
-> Status: Core JWT login done — OTP login frontend pending
-
----
-
-## Bug Fixes / Changes
-
-- [ ] [Easy] Confirm first-login redirect works correctly after password change
+> Routes: `/login`, `/forgot-password`, `/first-login`, `/otp-login` (pending)
+> Status: JWT login complete — OTP login frontend pending
+> Task status tracked in: [[Planning/Pages/_Overview#Auth]]
 
 ---
 
-## New Features
+## OTP Login Flow (pending)
 
-- [ ] [Hard] OTP login route `/otp-login` — passwordless entry: enter email → receive OTP → login
-- [ ] [Medium] OTP login as alternate entry point on `/login` page ("Login with OTP" link)
-- [ ] [Medium] OTP login guards — OTP expires after 10 min, one-time use enforced
-- [ ] [Easy] Show clear error messages for expired / already-used OTP codes
-- [ ] [Medium] Session timeout handling — auto-redirect to login if JWT expires during session
+1. User visits `/login` → clicks "Login with OTP"
+2. Enters email → receives OTP via email
+3. Enters OTP on `/otp-login` → logs in
+- OTP expires after 10 min, one-time use enforced
+- Backend complete; frontend route `/otp-login` not built yet
+
+## Session Rules
+
+- JWT expiry → auto-redirect to `/login`
+- First login → force password change on `/first-login` before proceeding
+
+---
+
+[[Home]] | [[Planning/Pages/_Overview]]

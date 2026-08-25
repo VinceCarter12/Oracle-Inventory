@@ -89,6 +89,8 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
     where: { id: req.user!.id },
     select: {
       id: true, name: true, email: true, position: true, phone: true,
+      branchId: true,
+      branch: { select: { id: true, name: true } },
       role: { select: { id: true, name: true } },
     },
   });

@@ -1,0 +1,18 @@
+-- Departments now belong to exactly one branch (was org-wide).
+ALTER TABLE "Department" ADD COLUMN "branchId" TEXT;
+
+-- Backfill existing departments into the earliest-created branch so the column can become NOT NULL.
+UPDATE "Department"
+SET "branchId" = (SELECT "id" FROM "Branch" ORDER BY "createdAt" ASC LIMIT 1)
+WHERE "branchId" IS NULL;
+
+ALTER TABLE "Department" ALTER COLUMN "branchId" SET NOT NULL;
+
+ALTER TABLE "Department" ADD CONSTRAINT "Department_branchId_fkey"
+  FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE INDEX "Department_branchId_idx" ON "Department"("branchId");
+
+-- Department name uniqueness is now scoped per branch instead of org-wide.
+DROP INDEX IF EXISTS "Department_active_name_ci_key";
+CREATE UNIQUE INDEX "Department_active_name_per_branch_ci_key" ON "Department" ("branchId", LOWER(BTRIM("name"))) WHERE "archivedAt" IS NULL;

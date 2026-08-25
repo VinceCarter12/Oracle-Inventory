@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   'approve_transactions',
   'access_logs',
   'manage_settings',
+  'manage_branches',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

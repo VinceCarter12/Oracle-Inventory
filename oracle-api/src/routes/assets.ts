@@ -17,6 +17,8 @@ const include = {
     orderBy: { createdAt: "desc" as const },
     include: { employee: { select: { id: true, name: true } } },
   },
+  deviceProfile: { include: { components: true } },
+  observations: { orderBy: { createdAt: "desc" as const }, take: 20 },
 };
 
 // GET /api/assets/stats — must be before /:id

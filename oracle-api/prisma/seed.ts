@@ -19,8 +19,7 @@ const PERMISSIONS = [
   { id: "perm-approve-transactions",key: "approve_transactions", description: "Approve asset transactions" },
   { id: "perm-access-logs",         key: "access_logs",         description: "View activity logs" },
   { id: "perm-manage-settings",     key: "manage_settings",     description: "Manage system settings" },
-  { id: "perm-import-inventory",    key: "import_inventory",    description: "Upload and import Excel/CSV inventory files" },
-  { id: "perm-force-import",        key: "force_import",        description: "Force overwrite duplicates during import" },
+  { id: "perm-manage-branches",     key: "manage_branches",     description: "Create, edit, archive, and delete branches" },
   { id: "perm-scan-assets",        key: "scan_assets",         description: "Use OCR scanner to capture asset data" },
 ] as const;
 
@@ -30,13 +29,13 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   "role-super-admin": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
     "perm-manage-users", "perm-assign-roles", "perm-view-reports", "perm-manage-stock",
-    "perm-approve-transactions", "perm-access-logs", "perm-manage-settings",
-    "perm-import-inventory", "perm-force-import", "perm-scan-assets",
+    "perm-approve-transactions", "perm-access-logs", "perm-manage-settings", "perm-manage-branches",
+    "perm-scan-assets",
   ],
   "role-admin": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
     "perm-view-reports", "perm-manage-stock", "perm-approve-transactions", "perm-access-logs",
-    "perm-import-inventory", "perm-scan-assets",
+    "perm-scan-assets",
   ],
   "role-staff": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-manage-stock",
@@ -107,16 +106,16 @@ async function main() {
 
   // ─── Departments ──────────────────────────────────────────────────────────
   const departments = [
-    { id: "dept-it",          name: "IT" },
-    { id: "dept-accounting",  name: "Accounting" },
-    { id: "dept-operations",  name: "Operations" },
-    { id: "dept-hr",          name: "HR" },
+    { id: "dept-it",          name: "IT",          branchId: "branch-cubao" },
+    { id: "dept-accounting",  name: "Accounting",  branchId: "branch-cubao" },
+    { id: "dept-operations",  name: "Operations",  branchId: "branch-cubao" },
+    { id: "dept-hr",          name: "HR",          branchId: "branch-cubao" },
   ];
   for (const d of departments) {
     await prisma.department.upsert({
       where:  { id: d.id },
-      update: { name: d.name },
-      create: { id: d.id, name: d.name },
+      update: { name: d.name, branchId: d.branchId },
+      create: { id: d.id, name: d.name, branchId: d.branchId },
     });
   }
   console.log("✓ Departments: IT, Accounting, Operations, HR");

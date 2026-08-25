@@ -5,6 +5,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { api } from '$lib/api';
 
   // If not authenticated or no forced change, redirect appropriately
   const authenticated      = $derived(authStore.isAuthenticated);
@@ -40,7 +41,7 @@
     error = '';
 
     try {
-      const res = await fetch('/api/users/me/password', {
+      const res = await api.raw('/api/users/me/password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

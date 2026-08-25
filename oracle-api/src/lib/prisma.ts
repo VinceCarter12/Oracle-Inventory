@@ -1,5 +1,10 @@
+import dotenv from "dotenv";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+// Ensure Prisma never retains a stale DATABASE_URL inherited by a local
+// launcher. Load the project configuration before constructing the adapter.
+dotenv.config({ override: true });
 
 function createPrismaClient() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });

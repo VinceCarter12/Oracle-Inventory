@@ -1,31 +1,34 @@
 ---
 date: 2026-07-03
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Dashboard — Changes & Features
+# Dashboard — Spec
 
 > Route: `/dashboard`
-> Status: ✅ Complete — all planned widgets built (2026-07-03)
+> Status: ✅ Complete (2026-07-03)
+> Task status tracked in: [[Planning/Pages/_Overview#Dashboard]]
 
 ---
 
-## Bug Fixes / Changes
+## What's Built
 
-- [x] [Medium] Merge `/reports` analytics into dashboard layout (decision: reports page removed, metrics fold into dashboard)
-- [x] [Easy] Remove `/reports` route from sidebar nav and oracle-sv routes
-- [x] [Medium] Wire activity bar chart to real backend data (`/api/reports/summary` → `movementsByMonth`)
-- [x] [Medium] Wire condition donut chart to live asset condition counts (`/api/reports/summary` → `kpi`)
+All planned dashboard widgets are live. Reports page was removed and merged here — see [[Decisions/2026-06-28-reports-merged-into-dashboard]].
+
+| Widget | Data Source |
+|--------|------------|
+| Summary counters (Total, Assigned, Available, Repair, Disposal) | `/api/reports/summary` → `kpi` |
+| Condition donut chart | `/api/reports/summary` → `kpi` |
+| Activity bar chart (7-day) | `/api/reports/summary` → `movementsByMonth` |
+| Category / brand breakdown (top 5) | `/api/reports/summary` → `topCategories` |
+| Utilization metrics panel | Derived client-side from `branchStats` |
+| By-branch asset summary | `/api/reports/summary` → `branchStats` |
+| By-department asset summary | `/api/reports/summary` → `deptStats` |
+| Assignment history (last 8 events) | `/api/reports/summary` → `recentMovements` |
+| Condition trend chart | `/api/reports/condition-trend` → `ChartLine.svelte` |
+| Movement frequency panel | `/api/reports/movement-frequency` |
+| Export CSV | `/api/reports/total-assets` |
 
 ---
 
-## New Features
-
-- [x] [Easy] Summary counters: Total Assets, Assigned, Available, Under Repair, For Disposal
-- [x] [Medium] Category / brand breakdown (top 5 categories via `/api/reports/summary` → `topCategories`)
-- [x] [Medium] Utilization metrics panel — derived client-side from `branchStats` (no extra endpoint needed): overall %, avg per branch, top branch, underutilized count
-- [x] [Medium] By-branch asset summary (from `/api/reports/summary` → `branchStats`)
-- [x] [Medium] By-department asset summary — added `deptStats` to `/api/reports/summary` (departments reached via employee assignments)
-- [x] [Hard] Assignment history widget — `recentMovements` added to `/api/reports/summary` (last 8 assign/transfer/return/onboard/offboard events from MovementLog)
-- [x] [Hard] Condition trend chart — new endpoint `/api/reports/condition-trend` (monthly repair_send / repair_return / disposal event counts, last 6 months) + new `ChartLine.svelte` component
-- [x] [Hard] Movement frequency panel — new endpoint `/api/reports/movement-frequency` (top N assets by MovementLog count, capped at 20) + bar list panel
+[[Home]] | [[Planning/Pages/_Overview]]

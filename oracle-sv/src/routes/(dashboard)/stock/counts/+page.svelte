@@ -1,0 +1,1 @@
+<div class="page"><h1>Stock counts</h1><p>Counts move through draft, submitted, and approved states. Submitters cannot approve their own variance.</p><section class="panel">No active count session is selected. Start from a branch location.</section></div><style>.page{max-width:700px;margin:auto;padding:32px}.panel{border:1px solid #ddd;border-radius:10px;padding:20px}</style>

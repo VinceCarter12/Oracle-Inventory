@@ -1,28 +1,33 @@
 ---
 date: 2026-06-29
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Scan System — Changes & Features
+# Scan System — Spec
 
 > Routes: `/assets/scan`, `/scan/mobile`, `/scan/review`
-> Status: Backend done — mobile + review UI scaffolded, needs full wiring
+> Status: Suspended 2026-07-30 - user-facing QR/OCR rollout frozen pending owner decision; backend and UI scaffolds remain in place
+> Task status tracked in: [[Planning/Pages/_Overview#Scan-System]]
 
 ---
 
-## Bug Fixes / Changes
+## Scan Room Flow
 
-- [ ] [Medium] Wire `/scan/mobile` to scan room backend (connect device, send scan results)
-- [ ] [Medium] Wire `/scan/review` admin queue to backend (fetch pending results, approve/reject)
+> **Suspension note**: This flow remains a retained specification only. Do not continue user-facing rollout for `/assets/scan`, `/scan/mobile`, or `/scan/review` until an owner decision reopens the Scan System. Do not delete existing code/scaffolds as part of the freeze.
+
+1. Admin opens desktop → generates a room code → room code displays as QR
+2. Mobile device(s) scan the QR → join the scan room
+3. Mobile scans asset QR/barcodes → results stream to the room
+4. Admin review queue (`/scan/review`) receives results → approve or flag unknowns
+
+## Constraints
+
+- 1–5 mobile devices per room simultaneously
+- 100+ bulk scan: results queued, running count shown, auto-submit batch
+- Room expiry countdown displayed on mobile
+- Flashlight toggle on mobile scan page
+- Unknown asset tag (not in DB) → flagged for admin review
 
 ---
 
-## New Features
-
-- [ ] [Hard] Multi-device scan room — support 1–5 mobile devices joining the same room via room code
-- [ ] [Medium] Flashlight toggle on mobile scan page
-- [ ] [Hard] 100+ bulk scan support — queue results, show running count, auto-submit batch
-- [ ] [Hard] Admin review queue fully functional — show scan results, match to assets, approve or flag unknown
-- [ ] [Medium] QR → phone handoff — desktop shows room code QR, mobile scans it to join
-- [ ] [Easy] Room expiry countdown displayed on mobile scan page
-- [ ] [Medium] Unknown scan alert — if scanned asset tag not found in DB, flag for admin review
+[[Home]] | [[Planning/Pages/_Overview]]

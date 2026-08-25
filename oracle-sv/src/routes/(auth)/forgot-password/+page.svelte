@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { api } from '$lib/api';
   // Step 1: enter email → POST /api/auth/forgot-password
   // Step 2: enter OTP + new password → POST /api/auth/reset-password
 
@@ -19,7 +20,7 @@
     }
     emailBusy = true;
     try {
-      const res = await fetch('/api/auth/forgot-password', {
+      const res = await api.raw('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
@@ -54,7 +55,7 @@
 
     resetBusy = true;
     try {
-      const res = await fetch('/api/auth/reset-password', {
+      const res = await api.raw('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), code: otpCode.trim(), newPassword }),

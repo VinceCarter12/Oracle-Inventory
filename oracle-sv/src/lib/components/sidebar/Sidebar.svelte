@@ -48,17 +48,20 @@
           children: [
             { id: 'assets-all',    label: 'All Assets',    href: '/assets',        permission: 'view_inventory' },
             { id: 'assets-add',    label: 'Add Asset',     href: '/assets/add',    permission: 'create_inventory' },
-            { id: 'assets-import', label: 'Import Assets', href: '/assets/import', permission: 'import_inventory' },
           ],
         },
         { id: 'assignments', label: 'Assignments', icon: 'clipboard', href: '/assignments', permission: 'view_inventory' },
         { id: 'hardware-audit', label: 'Hardware Audit', icon: 'cpu', href: '/hardware-audit', permission: 'view_inventory' },
+        { id: 'network', label: 'Network', icon: 'globe', href: '/network', permission: 'view_inventory' },
+        { id: 'cctv', label: 'CCTV & NVR', icon: 'video', href: '/cctv', permission: 'view_inventory' },
+        { id: 'infrastructure-servers', label: 'Servers & Circuits', icon: 'server', href: '/infrastructure/servers', permission: 'view_inventory' },
       ],
     },
     {
       label: 'Organization',
       items: [
         { id: 'employees', label: 'Employees', icon: 'users',    href: '/employees', permission: 'view_inventory' },
+        { id: 'departments', label: 'Departments', icon: 'users', href: '/departments', permission: 'view_inventory' },
         { id: 'branches',  label: 'Branches',  icon: 'building', href: '/branches',  permission: 'view_inventory' },
       ],
     },
@@ -200,7 +203,7 @@
   }
 </script>
 
-<aside class="sidebar" class:expanded class:mobile-open={mobileSidebarOpen} aria-label="Main sidebar">
+<aside id="main-sidebar" class="sidebar" class:expanded class:mobile-open={mobileSidebarOpen} aria-label="Main sidebar">
 
   <!-- ── Top: logo pill (collapsed) / Menu header (expanded) ───────────── -->
   <div class="sidebar-head">
@@ -631,7 +634,8 @@
   }
 
   /* ── Mobile: sidebar becomes a fixed overlay drawer ─────────────────────── */
-  @media (max-width: 767px) {
+  /* iPad/tablet drawer breakpoint: 1024px leaves enough room for the main content. */
+  @media (max-width: 1023px) {
     .sidebar {
       position: fixed !important;
       left: 0;

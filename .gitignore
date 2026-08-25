@@ -41,6 +41,13 @@ desktop.ini
 .fallow/
 .playwright-mcp/
 skills-lock.json
+.codex/
+.kiro/
+.audit-main/
+.tmp_excel_audit/
+_codex_tmp/
+.worktrees/
+*.codex-*.log
 
 # Editor configs
 .obsidian/

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
+  import { apiUrl } from '$lib/api';
 
   // ── Device token from URL ─────────────────────────────────────────────────
   const deviceToken = $derived($page.url.searchParams.get('device') ?? '');
@@ -61,7 +62,7 @@
   let submitted    = $state(false);
 
   // ── API base (same origin as the page, proxied by SvelteKit) ─────────────
-  const API = '/api';
+  const API = apiUrl('/api');
 
   // ── Session ping on mount ─────────────────────────────────────────────────
   onMount(async () => {

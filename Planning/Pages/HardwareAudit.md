@@ -473,69 +473,40 @@ Overall status = worst status across all fields.
 
 ---
 
-## Implementation Phases
+## Implementation Status
 
-> **Reordered 2026-07-03**: manual baseline entry dropped — parser comes FIRST since
-> the baseline is now just the first accepted scan.
+✅ **All phases A–E complete (2026-07-06)**
 
-### Phase A — Belarc Parser *(was Phase B)* ✅ COMPLETE 2026-07-06
-- [x] Install `node-html-parser` in `oracle-api`
-- [x] Write `parseBelarc(html: string): ParsedSpecs` — `oracle-api/src/lib/belarc/` (types, section registry, parser); extracts the 21 recorded sections
-- [x] Verify against a real Belarc export — done 2026-07-03 with `(Carter).html` (ASUS ROG Strix G513IC); structure confirmed
-- [x] Tag each field with volatility tier (hard / soft / skip) — per-field via 12 custom extractors, section-default for the rest
-- [x] Handle missing sections gracefully ("None detected" → empty section; absent → `meta.missingSections`; non-Belarc HTML → `NotABelarcReportError`)
-- [x] Test suite: 20 vitest tests against the real export fixture (`__tests__/fixtures/carter.html`)
+Phase-level task tracking: [[Planning/Pages/_Overview#Hardware-Audit]]
 
-> ⚠ **Parser findings vs. this plan** (from the real export, 2026-07-06):
-> - Section headers are `<h2 class="reportSectionHeader">`, **not divs** (bodies are divs)
-> - One `.reportSection` div can hold **multiple** header+body pairs — parser pairs each `<h2>` with its sibling body
-> - Footnote markers are `<sup>` tags appended to headers ("Memory c,d")
-> - Virus Protection renders as a **table** in real exports, not text lines
-> - Serials/drives/RAM slots/licenses live in `<table>` cells — parser extracts cell-by-cell
+### Source Merge Update (verified 2026-08-01)
 
-### Phase B — Scan Upload + Baseline ✅ COMPLETE 2026-07-06
-- [x] Add `HardwareScan` model to Prisma schema (with `isBaseline`, `rawHtml`) + `HwComparisonStatus` / `HardwareScanStatus` enums — pushed to Neon
-- [x] `POST /api/hardware-audit/scan` — multipart HTML upload → parse → store; `dryRun=true` returns preview only (comparison itself is Phase C)
-- [x] `PUT /api/hardware-audit/scans/:id/baseline` — accept scan as baseline (one per asset, transactional swap; marks scan reviewed)
-- [x] Also built: `GET /scans?assetId=`, `GET /scans/:id`, `GET /scans/:id/raw` (CSP-sandboxed evidence view), `GET /baseline/:assetId`
-- [x] `/hardware-audit/upload` page — 3-step flow (select asset, upload w/ dry-run preview, submit); supports `?asset=` preselect; offers "Accept as Baseline" after first submit
-- [x] Hardware **section** on `/assets/[id]` — baseline headline specs, scan history with accept-as-baseline, sandboxed original-report viewer modal
-  - *Deviation from wireframe*: rendered as a section in the right panel, not a tab — the asset detail page has no tab system; revisit if tabs are added
-  - *Deviation*: shown for all asset categories, not just IT equipment — category names are free-form, no reliable "IT" filter yet
-- Permissions reused: upload/view = `view_inventory`, accept baseline = `edit_inventory` (no new permission keys seeded)
-- Sidebar "Hardware Audit" nav item deferred to Phase D (queue page is its landing route)
+- Upload UI supports selecting safe Belarc fields for source merge into Asset records.
+- Merge semantics are explicit: blank official asset field plus selected Belarc value applies the value; equal official and Belarc values are recorded as verified; differing nonblank values create a conflict and block the merge.
+- Existing or minimal Asset records are preferred before creating a new Asset.
+- Scan and update run in one transaction, then latest hardware state is recomputed.
+- First baseline remains an explicit admin action.
+- No database migration was required.
+- Verification evidence: 137 API tests passed and the strict API build passed. Frontend Svelte check is still blocked by pre-existing style resolver/access errors outside this source-merge verification.
+- Commercial Belarc corporate licensing remains unconfirmed, so production/customer use still requires BelManage/export/API/license due diligence.
+- User-facing scan routes remain suspended; this update applies to Belarc Hardware Audit only.
 
-### Phase C — Comparison Engine ✅ COMPLETE 2026-07-06
-- [x] Field-by-field diff: new scan `parsedSpecs` vs baseline scan `parsedSpecs` — `oracle-api/src/lib/belarc/compare.ts` (`compareSpecs`), keyed on the stable field keys from Phase A
-- [x] Apply volatility tiers — hard → 🔴 mismatch, soft → 🟡 warning, skip → ignored
-- [x] Store `comparisonResult` JSON + `overallStatus` on the scan at upload time
-- [x] Also: `missing` (in baseline, absent from scan) and `added` (in scan, not in baseline) statuses — both escalate by tier (missing/added *hard* component = mismatch, e.g. removed RAM stick or unrecognized drive)
-- [x] Dry-run upload now returns the comparison too (pass `assetId`) — uploader sees the diff before submitting; upload page renders it (summary line + flagged-field list, hard fields dotted red)
-- [x] Accepting a new baseline **recomputes all pending scans** of that asset against it (in the same transaction) so the queue never shows stale comparisons
-- [x] 12 unit tests (`compare.test.ts`): self-compare = clean match, hard/soft mutations, removed RAM stick, added drive, skip-churn ignored, mixed severity, summary math
-- Verified live: identical file → match (112 compared fields); tampered file (drive serial + OS version) → mismatch with exactly the 2 expected flags; baseline swap → pending scan recomputed to mismatch
+### Manual Intake Expansion Boundary (approved 2026-08-22)
 
-### Phase D — Admin Review Queue ✅ COMPLETE 2026-07-06
-- [x] `GET /api/hardware-audit/scans` — filters (status, overallStatus, branchId, assetId), pagination, summary counts; sorted pending → worst → newest
-- [x] `PUT /api/hardware-audit/scans/:id/review` — mark reviewed / flag / archive with notes (`approve_transactions`); logs `hardware_scan_<action>`
-- [x] `GET /api/hardware-audit/badge` — lightweight pending-mismatch count for the sidebar dot
-- [x] `/hardware-audit` queue page — filters, summary chips, sorted rows (reviewed rows muted), pagination, row click → detail
-- [x] `/hardware-audit/[scanId]` comparison detail page — overall result card, comparison table grouped by section (flagged sections first, explanation boxes on flagged rows), admin review box (notes + Flag / Mark Reviewed / Archive), sandboxed original-report modal, accept-as-baseline
-- [x] Sidebar "Hardware Audit" nav item (new `cpu` icon) with red dot while pending mismatches exist
-- Verified in the browser end-to-end (Playwright): login → queue → detail → flag with notes → status FLAGGED; raw-report modal renders with sandbox blocking the report's local file:// assets (expected console noise, not a bug)
-- Note: email-on-mismatch (open question #2) still open — not wired
+The broader workbook-driven inventory expansion uses [[Planning/Pages/Inventory-Intake]] as the planned official intake flow. Manual Mode owns official records for employees, assets, infrastructure, CCTV/NVR, ISP circuits, and tools. Hardware Audit remains the Belarc evidence/review area for computer-like devices only.
 
-### Phase E — Exit Check Integration ✅ COMPLETE 2026-07-06 (un-deferred, confirmed by Vince)
-- [x] Exit-check rule (`oracle-api/src/lib/belarc/exitCheck.ts`): an asset is **audit-enrolled** once it has a baseline; enrolled assets can only be returned when their latest non-baseline, non-archived scan is `reviewed`
-  - States: `not_required` (no baseline) / `missing` (no scan) / `pending` / `flagged` / `cleared` — missing/pending/flagged block the return
-- [x] Enforced on all three return paths (409 with actionable message + `exitCheck` state):
-  - `PUT /api/assignments/:id/approve-return`
-  - `POST /api/assignments/:id/return` (direct return)
-  - `POST /api/turnover/resignation/:employeeId` (whole collection refused, `blockedAssets` listed)
-- [x] `GET /api/turnover/resignation/:employeeId` now returns `exitCheck` per assigned asset — ready for the future offboarding UI
-- [x] Asset detail Hardware section shows an "Exit check: cleared / awaiting review / flagged / scan required" chip (client-side mirror of the server rule)
-- [x] 9 unit tests on the pure classifier; full lifecycle verified live (blocked while pending on direct return + turnover → cleared after review)
-- Note: return modals in oracle-sv surface the 409 message via their existing error states — no dedicated offboarding UI exists yet (turnover API has no SvelteKit consumer)
+Belarc can assist by proposing or verifying selected safe computer fields after review. It must not auto-create official infrastructure records, overwrite official values silently, store raw credentials, or replace the manual intake workflow. See [[Planning/Inventory-Field-Dictionary]] and [[Decisions/2026-08-22-manual-primary-belarc-assisted-intake]].
+
+### Implementation Notes (from build)
+
+- Section headers are `<h2 class="reportSectionHeader">`, not divs (bodies are divs)
+- One `.reportSection` div can hold multiple header+body pairs
+- Virus Protection renders as a table in real exports, not text lines
+- Serials/drives/RAM slots/licenses live in `<table>` cells
+- Hardware section on `/assets/[id]` rendered as a section in the right panel, not a tab (asset detail has no tab system — revisit if tabs added)
+- Hardware section shown for all asset categories (category names are free-form, no reliable "IT" filter yet)
+- Email-on-mismatch (open question #2) still not wired
+- Return modals in oracle-sv surface the 409 exit-check message via existing error states — no dedicated offboarding UI yet (turnover API has no SvelteKit consumer)
 
 ---
 

@@ -47,6 +47,9 @@ tags: [planning, overview]
 - [ ] [Medium] Show CCTV fields only when category = CCTV
 - [ ] [Medium] Top-level category groups
 - [ ] [Easy] Sub-category support
+- [ ] [Hard] Implement workbook-driven Asset detail sections: overview, lifecycle, specs, connectivity, audit/source confidence, maintenance
+- [ ] [Hard] Add repeatable component records for RAM, storage, monitors, docks, and serialized peripherals
+- [ ] [Hard] Add source-confidence review for manual vs Belarc proposed computer fields
 
 ---
 
@@ -71,16 +74,32 @@ tags: [planning, overview]
 - [ ] [Medium] Maintenance history tab on detail
 - [ ] [Hard] Exit check / offboarding workflow → see [[Planning/Pages/HardwareAudit]]
 - [ ] [Easy] Employee status badge on list and profile
+- [ ] [Medium] Add employee identity fields from workbook: employee number, branch/site, department, position, email
+- [ ] [Medium] Show expanded assignment groups: company devices, BYOD, peripherals, infrastructure responsibility
+
+---
+
+## Departments
+- [x] [Medium] Dedicated Department Management page and sidebar entry implemented locally
+- [x] [Medium] Create, rename, archive, and delete flows implemented locally
+- [x] [Medium] Employee resolution implemented: reassign employees or clear department assignment
+- [x] [Medium] Transactional ActivityLog records implemented for department mutations
+- [x] [Medium] Local Prisma migration and focused tests/build passed
+- [ ] [Medium] Implement approved Department UI/API remediation wireframe: clearer lifecycle states, destructive-action resolution, validation copy, and failure states
+- [ ] [Medium] Validate remediation with focused Department API tests, frontend check, and browser smoke across create/rename/archive/unarchive/delete paths
+- [ ] [Hard] Create/apply canonical Supabase migration and verify against target database
 
 ---
 
 ## Branches
+- [ ] [Medium] Apply `manage_branches` migration, assign the intended role(s), and browser/API-smoke-test Add Branch with exact map pin (code and unit tests complete 2026-07-30)
 - [ ] [Easy] Confirm cubao branch in seed data
 - [ ] [Hard] Geographic map — all branches as pins
 - [ ] [Hard] Clickable branch pins → branch detail
 - [ ] [Medium] Branch detail: asset count + employee count
 - [ ] [Medium] Branch detail: top asset categories
 - [ ] [Very Hard] Mapbox integration (decision pending)
+- [ ] [Hard] Add branch infrastructure summary: network devices, CCTV/NVR, servers, ISP circuits, and tool/stock counts
 
 ---
 
@@ -92,6 +111,26 @@ tags: [planning, overview]
 - [ ] [Easy] Role type color badge on list
 - [ ] [Medium] Permission toggle UI improvement (switches)
 - [ ] [Easy] Role description shown on list
+- [ ] [Hard] Add expansion permissions for inventory intake, Belarc review, infrastructure edit, sensitive network fields, and secret references
+
+---
+
+## Inventory Intake
+> Local implementation candidates recorded 2026-08-23. Specs: [[Planning/Pages/Inventory-Intake]], [[Planning/Inventory-Field-Dictionary]], [[Planning/Phase-1-Computer-Intake-Spec]], [[Planning/Phase-2-Belarc-Proposal-Hardening-Spec]], [[Planning/Phase-3-Network-Infrastructure-Spec]], [[Planning/Phase-4-CCTV-NVR-Spec]], [[Planning/Phase-5-Servers-Firewall-ISP-Spec]], [[Planning/Phase-6-Tools-and-Stock-Spec]], and [[Planning/Phase-7-Cross-Phase-Release-and-Operations-Spec]]. Checkbox completion below means code is present locally; it does not mean migration, commit, browser test, staging, or production release is complete. On 2026-08-24 the owner approved bypassing separate staging because the live project is unused; canonical migration reconciliation, restorable backup/export, feature-off production deployment, smoke tests, rollback ownership, and the Phase 2 licensing gate remain mandatory. See [[Journal/2026-08-24]].
+
+- [x] [Hard] Phase 1: implement company computer/laptop Manual Mode with branch required, assetTag canonical, duplicate computer-name warning, optional assignment, review summary, and activity log — applied to the unused production database as migration `20260823175443`; matching pushed commit `3de1028` is not merged, browser-verified, or release-verified
+- [x] [Hard] Phase 2 candidate: implement production-disabled Belarc proposal hardening with license gate, allowlist, redaction, provenance, review, conflicts, and rollback — local candidate; must remain disabled
+- [x] [Very Hard] Phase 3 candidate: implement network infrastructure interfaces, IP observation history, VLANs, switch ports, topology links, and branch connectivity — local candidate
+- [x] [Hard] Phase 4 candidate: implement CCTV/NVR cameras, recorder profiles, explicit channel assignments, physical locations, network references, and secret-reference-only rules — local candidate
+- [x] [Very Hard] Phase 5 candidate: implement servers, firewall profiles, ISP circuits, modem/router relationships, addressing modes, and restricted sensitive infrastructure fields — local candidate
+- [x] [Hard] Phase 6 candidate: implement tagged Asset versus quantity-managed stock decision flow, stock locations, double-entry ledger movements, count approval, derived balances, and low-stock policies — schema applied to unused production target as `20260823184250` by explicit owner schedule exception, with flags off, RLS enabled, and no public grants; application route/page/test scope remains incomplete and is not release-ready
+- [x] [Hard] Phase 7 candidate: implement cross-phase release controls with feature flags, staging, pilot branch rollout, backup/restore evidence, observability, rollback, and acceptance gates — applied to the unused production database as migration `20260823175436`; matching pushed commit `799689f` is not merged or release-verified
+- [ ] [Hard] Implement Manual Mode as primary official intake for computers, peripherals, network devices, CCTV/NVR, servers, ISP circuits, and tools
+- [ ] [Hard] Implement step-based intake wizard with draft save, category-specific fields, relationship mapping, and review summary
+- [ ] [Hard] Implement Belarc-assisted computer field proposals without silent overwrite
+- [ ] [Hard] Reject raw credential fields and store only secret-reference metadata
+- [ ] [Very Hard] Add normalized models for device profiles, components, network interfaces, port relationships, CCTV/NVR channels, ISP circuits, and tool inventory
+- [ ] [Medium] Add UI source labels for Manual, Belarc, Existing, Proposed, Verified, and Conflict
 
 ---
 
@@ -106,13 +145,13 @@ tags: [planning, overview]
 ---
 
 ## Activity Log
-- [ ] [Medium] Wire activity log list to `/api/activity`
-- [ ] [Medium] Show real timestamps + user names from backend
-- [ ] [Medium] Filter by user
-- [ ] [Medium] Filter by action type
-- [ ] [Medium] Filter by entity type
-- [ ] [Easy] Date range filter
-- [ ] [Easy] Confirm no delete endpoint exposed in UI
+- [x] [Medium] Wire activity log list to `/api/activity` ✅ verified 2026-07-06 — was already fully wired (likely built with initial SvelteKit rewrite, docs never caught up); confirmed live: 280 real entries, real network calls
+- [x] [Medium] Show real timestamps + user names from backend ✅ verified 2026-07-06 — real timestamps + `user.name` rendered per row
+- [ ] [Medium] Filter by user — dedicated user dropdown not present (only entity/action-text/date range exist)
+- [x] [Medium] Filter by action type ✅ free-text "Filter by action…" input, backend does case-insensitive `contains` match — verified working
+- [x] [Medium] Filter by entity type ✅ verified live 2026-07-06 — dropdown populated from `/api/activity/entities`, selecting "Employee" correctly filtered 280→79 entries via `GET /api/activity?entity=Employee`
+- [x] [Easy] Date range filter — `DatePicker` from/to wired to `from`/`to` query params, same pattern as verified entity filter
+- [x] [Easy] Confirm no delete endpoint exposed in UI ✅ confirmed — `activity.ts` only exposes `GET /` and `GET /entities`, no delete route exists
 - [ ] [Hard] Archive old logs (toggle archived view)
 - [ ] [Medium] Per-asset activity log on asset detail
 - [ ] [Medium] Per-employee activity log on employee detail
@@ -120,6 +159,8 @@ tags: [planning, overview]
 ---
 
 ## Scan System
+> **Suspended 2026-07-30**: User-facing QR/OCR Scan System work and rollout for `/assets/scan`, `/scan/mobile`, and `/scan/review` are frozen pending a later owner decision. Do not delete existing code/scaffolds. Belarc Hardware Audit is separate and remains active.
+
 - [ ] [Medium] Wire `/scan/mobile` to scan room backend
 - [ ] [Medium] Wire `/scan/review` admin queue to backend
 - [ ] [Hard] Multi-device scan room (1–5 devices)
@@ -143,16 +184,13 @@ tags: [planning, overview]
 ---
 
 ## Import
-- [ ] [Easy] Fix import column mapping missing field display
-- [ ] [Medium] Fix employee first name detection on bulk upload
-- [ ] [Easy] Fix import error messages (specific row/column)
-- [ ] [Easy] Drag-and-drop file upload zone
-- [ ] [Medium] Pre-import preview table
-- [ ] [Medium] Per-row status in preview (Duplicate / Skip / Import / Error)
-- [ ] [Medium] Skip individual rows before import
-- [ ] [Hard] Edit rows inline in preview before import
-- [ ] [Easy] Import progress indicator
-- [ ] [Medium] Retry failed rows from history detail
+> Removed 2026-08-02 by owner decision. Do not rebuild bulk upload unless a new decision explicitly reverses this.
+
+- [x] [Hard] Remove bulk import frontend routes, navigation entry, history/detail screens, and upload flow
+- [x] [Hard] Remove backend import routes, parsing/import services, mapping presets, history endpoints, and templates
+- [x] [Hard] Remove Prisma import models/enums/relations from source schema while preserving actual assets and activity logs
+- [x] [Medium] Create forward-only Supabase migration for the next database account; current Supabase test DB intentionally not touched
+- [x] [Medium] Verify removal: API build/tests passed; frontend check reported 0 errors with existing warnings
 
 ---
 
@@ -161,6 +199,7 @@ tags: [planning, overview]
 
 > **2026-07-03**: No manual baseline entry — first accepted scan IS the baseline. Verified against a real Belarc export.
 > **2026-07-06**: All phases A–E built and tested (unit tests + live/browser verification). Email-on-mismatch notification (open question) skipped for now per Vince.
+> **2026-08-01**: Source merge verified: selectable safe Belarc fields, blank official fields can be filled, equal values verified, conflicting nonblank values blocked, scan/update transaction with latest-state recompute, no migration. API tests/build passed; frontend Svelte check remains blocked by pre-existing style resolver/access errors.
 
 ### Phase A — Belarc Parser
 - [x] [Hard] Install HTML parser (`node-html-parser` or `cheerio`) in oracle-api
@@ -193,7 +232,7 @@ tags: [planning, overview]
 ---
 
 ## Deployment
-- [ ] [Medium] Choose SvelteKit adapter (adapter-node vs adapter-vercel)
+- [x] [Medium] Choose SvelteKit adapter — `adapter-vercel` accepted 2026-07-27
 - [ ] [Easy] Revert dev/test values before production
 - [ ] [Easy] Secure JWT_SECRET in production .env
 - [ ] [Easy] Set CORS_ORIGIN to production domain
@@ -201,10 +240,10 @@ tags: [planning, overview]
 - [ ] [Medium] Run prisma db push + seed on production
 - [ ] [Medium] Configure Gmail SMTP for production
 - [ ] [Easy] Verify OTP email delivers on production
-- [ ] [Medium] Deploy oracle-api with PM2
-- [ ] [Medium] Build and deploy oracle-sv frontend
+- [x] [Medium] Deploy `oracle-api` to Render — Live 2026-07-27; `/health` verified
+- [ ] [Medium] Promote the Vercel Node 20 runtime fix to `main` and obtain a successful Production frontend deploy (Preview `81136f2` is Ready)
 - [ ] [Easy] Verify all API calls use production URL
 - [ ] [Easy] Test login → dashboard on production
 - [ ] [Easy] Test OTP password reset on production
-- [ ] [Hard] Set up SSL / HTTPS on Hostinger
+- [ ] [Hard] Configure custom-domain DNS/TLS on Vercel after production smoke tests
 - [ ] [Medium] Set up uptime monitoring (UptimeRobot)

@@ -1,25 +1,28 @@
 ---
 date: 2026-06-29
-tags: [planning, page-tracker]
+tags: [planning, page-spec]
 ---
 
-# Users — Changes & Features
+# Users — Spec
 
 > Routes: `/users`, `/users/[id]`
 > Status: Core done — minor enhancements pending
+> Task status tracked in: [[Planning/Pages/_Overview#Users]]
 
 ---
 
-## Bug Fixes / Changes
+## Business Rules
 
-- [ ] [Easy] Confirm user status badge (Active / Inactive / Suspended) shows correctly on list
+- Admin cannot create a second SuperAdmin — enforce via UI (hide option) + API guard
+- "Must change password" flag shown on first login — visible on user detail
+
+## User Detail Fields
+
+- Last login time
+- Must-change-password indicator
+- Role + branch assignment
+- Resend onboarding email / reset link action
 
 ---
 
-## New Features
-
-- [ ] [Easy] Show last login time on user detail page
-- [ ] [Easy] "Must change password" flag visible on user detail (first-login indicator)
-- [ ] [Medium] Filter users by role and branch on list page
-- [ ] [Medium] Admin cannot create another SuperAdmin — enforce via UI (hide option) + API guard
-- [ ] [Easy] Resend onboarding email / reset link from user detail page
+[[Home]] | [[Planning/Pages/_Overview]]

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { apiUrl } from '$lib/api';
   import { authStore } from '$lib/stores/auth.svelte';
 
   const authenticated      = $derived(authStore.isAuthenticated);
@@ -44,7 +45,7 @@
     formError = '';
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, remember: rememberMe }),

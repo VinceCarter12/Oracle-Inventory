@@ -8,7 +8,7 @@
 
   // ── API types ─────────────────────────────────────────────────────────────
   interface ApiAsset {
-    id: string; name: string; serialNumber: string | null;
+    id: string; name: string; serialNumber: string | null; assetTag: string | null; computerName: string | null; purchaseDate: string | null;
     status: 'active' | 'lost' | 'stolen';
     condition: 'usable' | 'for_repair' | 'for_disposal';
     ownership: 'company' | 'personal';
@@ -17,6 +17,7 @@
     nextMaintenanceDate: string | null;
     lostAt: string | null;
     lostStolenNotes: string | null;
+    deviceProfile: { brand: string | null; model: string | null; deviceSerial: string | null; processor: string | null; motherboard: string | null; operatingSystem: string | null; osVersion: string | null; source: string; components: { id: string; type: 'ram' | 'storage'; slotOrBay: string | null; brand: string | null; model: string | null; serialNumber: string | null; capacity: string | null; source: string }[] } | null;
     createdAt: string; updatedAt: string;
     category: { id: string; name: string } | null;
     branch:   { id: string; name: string } | null;
@@ -197,7 +198,7 @@
   let hwRawUrl = $state('');
   async function hwViewRaw(scanId: string) {
     try {
-      const res = await fetch(`/api/hardware-audit/scans/${scanId}/raw`, {
+      const res = await api.raw(`/api/hardware-audit/scans/${scanId}/raw`, {
         headers: { Authorization: `Bearer ${authStore.token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -503,6 +504,9 @@
               <span class="field-label">Warranty Expiry</span>
               <span class="field-value">{fmtDate(asset.warrantyExpiry)}</span>
             </div>
+            <div class="field"><span class="field-label">Asset tag</span><span class="field-value">{asset.assetTag || '—'}</span></div>
+            <div class="field"><span class="field-label">Computer name</span><span class="field-value">{asset.computerName || '—'}</span></div>
+            <div class="field"><span class="field-label">Purchase date</span><span class="field-value">{fmtDate(asset.purchaseDate)}</span></div>
             <div class="field">
               <span class="field-label">Next Maintenance</span>
               <span class="field-value">{fmtDate(asset.nextMaintenanceDate)}</span>
@@ -523,6 +527,22 @@
             {/if}
           </div>
         </div>
+
+        <!-- Computer specifications section -->
+        {#if asset.deviceProfile}
+          <div class="rp-section">
+            <div class="section-head"><span class="section-title">Specifications</span><span class="badge badge-muted">{asset.deviceProfile.source === 'manual' ? 'Manual' : asset.deviceProfile.source}</span></div>
+            <div class="field-grid">
+              <div class="field"><span class="field-label">Brand / Model</span><span class="field-value">{[asset.deviceProfile.brand, asset.deviceProfile.model].filter(Boolean).join(' ') || '—'}</span></div>
+              <div class="field"><span class="field-label">Processor</span><span class="field-value">{asset.deviceProfile.processor || '—'}</span></div>
+              <div class="field"><span class="field-label">Motherboard</span><span class="field-value">{asset.deviceProfile.motherboard || '—'}</span></div>
+              <div class="field"><span class="field-label">Operating system</span><span class="field-value">{[asset.deviceProfile.operatingSystem, asset.deviceProfile.osVersion].filter(Boolean).join(' ') || '—'}</span></div>
+            </div>
+            {#if asset.deviceProfile.components.length > 0}
+              <div class="component-list">{#each asset.deviceProfile.components as component}<div class="component-summary"><strong>{component.type === 'ram' ? 'RAM' : 'Storage'}</strong><span>{[component.brand, component.model, component.capacity].filter(Boolean).join(' ') || 'Unspecified'}</span><small>{component.serialNumber || component.slotOrBay || '—'}</small></div>{/each}</div>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Recent Activity section -->
         <div class="rp-section">
@@ -1200,6 +1220,9 @@
 
   /* ── Hardware section ─────────────────────────────────────────────────── */
   .hw-head { justify-content: flex-start; }
+  .component-list { display: flex; flex-direction: column; border-top: 1px solid var(--hairline); }
+  .component-summary { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hairline); font-size: 12px; align-items: center; }
+  .component-summary small { color: var(--mute); font-family: var(--font-mono); }
   .hw-upload-btn {
     margin-left: auto; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
     padding: 4px 10px; border-radius: var(--r-sm, 6px);

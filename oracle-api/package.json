@@ -10,6 +10,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:seed": "tsx prisma/seed.ts",
     "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts",
+    "db:bootstrap-user": "tsx prisma/bootstrap-user.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -31,8 +32,7 @@
     "prisma": "^7.8.0",
     "resend": "^6.12.4",
     "sharp": "^0.34.5",
-    "tesseract.js": "^7.0.0",
-    "xlsx": "^0.18.5"
+    "tesseract.js": "^7.0.0"
   },
   "overrides": {
     "node-html-parser": {

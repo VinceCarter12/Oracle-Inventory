@@ -57,6 +57,22 @@ Inventory v1/
 
 ---
 
+## Single Source of Truth — Status Tracking
+
+| What | Where | Rule |
+|------|-------|------|
+| What files exist | `Home.md` Vault Index | Add every new note here immediately |
+| Task status (`[ ]`/`[x]`) | `Planning/Pages/_Overview.md` | **Only file allowed to have checkboxes** |
+| High-level remaining work | `Planning/PLAN.md` §9 | Update when a phase ships |
+| Why a decision was made | `Decisions/` ADRs | One file per decision |
+| What was built when | `Journal/YYYY-MM-DD.md` | One entry per session |
+| Page specs / wireframes | `Planning/Pages/*.md` | Spec content only — **no checkboxes** |
+
+**Never** add `[ ]` or `[x]` checkboxes to any `Planning/Pages/*.md` file except `_Overview.md`.
+**Never** duplicate status between `_Overview.md` and `PLAN.md` — `_Overview` is detailed, `PLAN.md §9` is high-level summary only.
+
+---
+
 ## Note-Writing Rules
 
 1. **Always use frontmatter** on every note:
@@ -90,8 +106,8 @@ Then write a journal entry summarizing what was built, and update Planning/PLAN.
 > Update this section manually or ask Claude to update it after each session.
 
 **Last worked on**: 2026-07-06
-**Status**: Hardware Audit COMPLETE — all phases A–E (parser, upload/baseline, comparison, review queue, exit-check block on all return paths). Only open item: email-on-mismatch notification (needs a decision).
-**Next priority**: Deployment (SvelteKit adapter + prod env, High) or wire `/activity` log page / scan system UI (Medium) — see PLAN.md §9
+**Status**: Hardware Audit COMPLETE — all phases A–E. Activity Log page verified already fully wired (was mistakenly tracked as pending — docs never caught up to the actual build); Phase 8 now COMPLETE.
+**Next priority**: Deployment to Vercel (install `adapter-vercel`, decide `oracle-api` hosting + domain, High) or wire `/scan/mobile` + `/scan/review` UI (Medium) — see PLAN.md §9
 
 ---
 
@@ -100,5 +116,5 @@ Then write a journal entry summarizing what was built, and update Planning/PLAN.
 - **Product**: Oracle Inventory — asset tracking system for Sir Jay's org (Manila, Cebu, Davao)
 - **Design system**: Vercel-inspired, documented in `Design/DESIGN.md`
 - **Auth**: JWT, single admin user currently (V2 adds multi-user RBAC + OTP)
-- **Deploy target**: Hostinger FTP (legacy) + SvelteKit adapter TBD
+- **Deploy target**: Vercel (`adapter-vercel`) — decided 2026-07-27, Hostinger dropped, see [[Decisions/2026-07-27-vercel-over-hostinger-deploy]]
 - **Live domain**: `oracleinventory.lubesmastery.com`

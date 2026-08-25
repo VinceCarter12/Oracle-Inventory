@@ -1,0 +1,1 @@
+<div class="page"><h1>Stock policies</h1><p>Minimum and reorder quantities are branch/location scoped and updated with expectedUpdatedAt.</p><section class="panel">No stock policy is selected.</section></div><style>.page{max-width:700px;margin:auto;padding:32px}.panel{border:1px solid #ddd;border-radius:10px;padding:20px}</style>

@@ -10,16 +10,14 @@
   import Modal from '$lib/components/Modal.svelte';
 
   // ── Types ─────────────────────────────────────────────────────────────────
-  type EmpSource = 'imported' | 'excel' | 'zoho' | 'manual';
-
   interface Employee {
     id:          string;
     name:        string;
     email:       string | null;
     phone:       string | null;
     employeeId:  string | null;
+    position:    string | null;
     isActive:    boolean;
-    source:      EmpSource;
     createdAt:   string;
     branch:      { id: string; name: string } | null;
     department:  { id: string; name: string } | null;
@@ -39,7 +37,6 @@
   let search       = $state('');
   let filterBranch = $state('all');
   let filterDept   = $state('all');
-  let filterSource = $state<'all' | EmpSource>('all');
 
   // ── Pagination ─────────────────────────────────────────────────────────────
   let currentPage = $state(1);
@@ -87,7 +84,7 @@
   let showAdd = $state(false);
   let adding  = $state(false);
   let addErr  = $state('');
-  let addForm = $state({ name: '', employeeId: '', branchId: '', departmentId: '', email: '', phone: '' });
+  let addForm = $state({ name: '', employeeId: '', branchId: '', departmentId: '', position: '', email: '', phone: '' });
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = $derived(
@@ -99,10 +96,7 @@
         || (e.employeeId ?? '').toLowerCase().includes(q);
       const matchBranch = filterBranch === 'all' || e.branch?.id === filterBranch;
       const matchDept   = filterDept   === 'all' || e.department?.id === filterDept;
-      const matchSource = filterSource === 'all'
-        || (filterSource === 'imported' && (e.source === 'imported' || e.source === 'excel'))
-        || (filterSource !== 'imported' && e.source === filterSource);
-      return matchSearch && matchBranch && matchDept && matchSource;
+      return matchSearch && matchBranch && matchDept;
     })
   );
 
@@ -133,7 +127,7 @@
 
   // ── Add Staff ─────────────────────────────────────────────────────────────
   function openAdd() {
-    addForm = { name: '', employeeId: '', branchId: '', departmentId: '', email: '', phone: '' };
+    addForm = { name: '', employeeId: '', branchId: '', departmentId: '', position: '', email: '', phone: '' };
     addErr = '';
     showAdd = true;
   }
@@ -148,6 +142,7 @@
         employeeId:   addForm.employeeId.trim(),
         branchId:     addForm.branchId     || null,
         departmentId: addForm.departmentId || null,
+        position:     addForm.position.trim() || null,
         email:        addForm.email.trim() || null,
         phone:        addForm.phone.trim() || null,
       });
@@ -165,8 +160,6 @@
 
   function resetPage() { currentPage = 1; }
 
-  const SOURCE_LABEL: Record<EmpSource, string> = { imported: 'Imported', excel: 'Imported', zoho: 'Zoho', manual: 'Manual' };
-  const SOURCE_CLASS: Record<EmpSource, string> = { imported: 'src-imported', excel: 'src-imported', zoho: 'src-zoho', manual: 'src-manual' };
 </script>
 
 <!-- ── Add Staff Modal ────────────────────────────────────────────────────── -->
@@ -195,6 +188,10 @@
         <option value="">— Select department —</option>
         {#each departments as d}<option value={d.id}>{d.name}</option>{/each}
       </select>
+    </div>
+    <div class="field field-full">
+      <label class="field-label" for="staff-position">Position</label>
+      <input id="staff-position" class="field-input" type="text" placeholder="e.g. IT Support Specialist" bind:value={addForm.position} />
     </div>
     <div class="field">
       <label class="field-label">Email</label>
@@ -288,12 +285,6 @@
           Edit
         </button>
       {/if}
-      <select class="filter-select" bind:value={filterSource} onchange={resetPage}>
-        <option value="all">All Sources</option>
-        <option value="imported">Imported</option>
-        <option value="zoho">Zoho Directory</option>
-        <option value="manual">Manual</option>
-      </select>
       <select class="filter-select" bind:value={filterBranch} onchange={resetPage}>
         <option value="all">All Branches</option>
         {#each branches as b}<option value={b.id}>{b.name}</option>{/each}
@@ -315,11 +306,8 @@
           <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
         <p class="empty-title">No employee records yet</p>
-        <p class="empty-sub">Import an Excel file with an <strong>Assigned To</strong> column to auto-create employee records, or add them manually.</p>
+        <p class="empty-sub">Add staff records manually, then assign company assets when needed.</p>
         <div class="empty-actions">
-          {#if can('import_inventory')}
-            <button class="btn-primary" onclick={() => goto('/assets/import')}>Import Assets</button>
-          {/if}
           {#if can('manage_stock')}
             <button class="btn-ghost" onclick={openAdd}>Add Staff Manually</button>
           {/if}
@@ -337,7 +325,6 @@
               {/if}
               <th>Name</th>
               <th>Employee ID</th>
-              <th>Source</th>
               <th>Department</th>
               <th>Branch</th>
               <th>Email</th>
@@ -360,9 +347,6 @@
                   {#if !emp.isActive}<span class="badge badge-muted">Inactive</span>{/if}
                 </td>
                 <td class="cell-mono">{emp.employeeId ?? '—'}</td>
-                <td>
-                  <span class="src-badge {SOURCE_CLASS[emp.source ?? 'manual']}">{SOURCE_LABEL[emp.source ?? 'manual']}</span>
-                </td>
                 <td>{emp.department?.name ?? '—'}</td>
                 <td>{emp.branch?.name ?? '—'}</td>
                 <td class="cell-email">{emp.email ?? '—'}</td>
@@ -377,7 +361,7 @@
               </tr>
             {/each}
             {#if filtered.length === 0}
-              <tr><td colspan="9" class="empty-cell">No employees match your filters.</td></tr>
+              <tr><td colspan={selectMode ? 8 : 7} class="empty-cell">No employees match your filters.</td></tr>
             {/if}
           </tbody>
         </table>
@@ -496,10 +480,6 @@
   .asset-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; background: var(--canvas-soft-2); border: 1px solid var(--hairline); color: var(--body); border-radius: 999px; font-size: 11.5px; font-weight: 600; font-family: var(--font-sans); }
 
   /* Badges */
-  .src-badge { display: inline-flex; padding: 2px 8px; border-radius: var(--r-sm); font-size: 11.5px; font-weight: 500; font-family: var(--font-sans); }
-  .src-imported { background: oklch(94% 0.04 250); color: oklch(35% 0.12 250); }
-  .src-zoho     { background: oklch(94% 0.06 55);  color: oklch(40% 0.15 55); }
-  .src-manual   { background: var(--canvas-soft-2); color: var(--mute); }
   .badge        { display: inline-flex; padding: 2px 8px; border-radius: var(--r-sm); font-size: 11px; font-weight: 500; font-family: var(--font-sans); }
   .badge-muted  { background: var(--canvas-soft-2); color: var(--mute); border: 1px solid var(--hairline); }
 
@@ -507,6 +487,7 @@
   .modal-note { font-size: 12.5px; color: var(--mute); margin: 0; font-family: var(--font-sans); }
   .form-err   { font-size: 12.5px; color: var(--error); background: var(--error-soft); border-radius: var(--r-sm); padding: 8px 12px; }
   .form-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-full { grid-column: 1 / -1; }
   .field      { display: flex; flex-direction: column; gap: 6px; }
   .field-label { font-size: 12.5px; font-weight: 500; color: var(--body); font-family: var(--font-sans); }
   .req        { color: var(--error); }

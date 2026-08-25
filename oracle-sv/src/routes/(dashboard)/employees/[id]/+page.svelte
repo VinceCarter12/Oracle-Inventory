@@ -7,8 +7,6 @@
 
   // ── Types ────────────────────────────────────────────────────────────────────
 
-  type EmpSource = 'imported' | 'excel' | 'zoho' | 'manual';
-
   interface Assignment {
     id:         string;
     status:     string;
@@ -29,7 +27,6 @@
     phone:        string | null;
     employeeId:   string | null;
     isActive:     boolean;
-    source:       EmpSource;
     createdAt:    string;
     branch:       { id: string; name: string } | null;
     department:   { id: string; name: string } | null;
@@ -101,9 +98,6 @@
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
-
-  const SOURCE_LABEL: Record<EmpSource, string> = { imported: 'Imported', excel: 'Imported', zoho: 'Zoho Directory', manual: 'Manual' };
-  const SOURCE_CLASS: Record<EmpSource, string> = { imported: 'src-imported', excel: 'src-imported', zoho: 'src-zoho', manual: 'src-manual' };
 
   const activeAssignments   = $derived(employee?.assignments.filter(a => a.status === 'active')  ?? []);
   const returnedAssignments = $derived(employee?.assignments.filter(a => a.status !== 'active')  ?? []);
@@ -292,10 +286,6 @@
               {:else}
                 <span class="fv fv-mono" class:fv-mute={!employee.employeeId}>{employee.employeeId ?? '—'}</span>
               {/if}
-            </div>
-            <div class="fc">
-              <span class="fl">SOURCE</span>
-              <span class="src-badge {SOURCE_CLASS[employee.source ?? 'manual']}">{SOURCE_LABEL[employee.source ?? 'manual']}</span>
             </div>
             <div class="fc">
               <span class="fl">EMAIL</span>
@@ -487,12 +477,6 @@
   .status-badge    { display: inline-block; font-size: 11.5px; font-weight: 500; padding: 2px 9px; border-radius: var(--r-full); font-family: var(--font-sans); }
   .status-active   { background: oklch(94% 0.07 155); color: oklch(35% 0.17 155); }
   .status-inactive { background: var(--canvas-soft-2); color: var(--mute); border: 1px solid var(--hairline); }
-
-  /* ── Source badges ──────────────────────────────────────────────────────── */
-  .src-badge     { display: inline-flex; padding: 2px 8px; border-radius: var(--r-sm); font-size: 11.5px; font-weight: 500; font-family: var(--font-sans); }
-  .src-imported  { background: oklch(94% 0.04 250); color: oklch(35% 0.12 250); }
-  .src-zoho      { background: oklch(94% 0.06 55);  color: oklch(40% 0.15 55); }
-  .src-manual    { background: var(--canvas-soft-2); color: var(--mute); }
 
   /* ── Section card ───────────────────────────────────────────────────────── */
   .section-card { background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); box-shadow: var(--shadow-l1); overflow: hidden; }

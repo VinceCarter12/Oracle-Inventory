@@ -32,6 +32,8 @@
     summary: { match: number; warning: number; mismatch: number; missing: number; added: number };
     fields: FieldComparison[];
   }
+  type MergeKey = 'systemModel' | 'systemSerial' | 'os' | 'processor' | 'ram' | 'motherboard' | 'macAddress' | 'assetTag';
+  interface MergeItem { key: MergeKey; label: string; official: string | null; current: string | null; state: 'apply' | 'verified' | 'conflict' | 'unavailable'; }
 
   // ── State ─────────────────────────────────────────────────────────────────
   let loading   = $state(true);
@@ -47,6 +49,8 @@
   let parseErr   = $state('');
   let preview    = $state<ParsedSpecs | null>(null);
   let comparison = $state<ComparisonResult | null>(null);
+  let merge = $state<MergeItem[]>([]);
+  let selectedMerge = $state<MergeKey[]>([]);
 
   const issues = $derived(
     (comparison?.fields ?? []).filter((f) => f.status !== 'match')
@@ -134,6 +138,8 @@
     parseErr = '';
     preview = null;
     comparison = null;
+    merge = [];
+    selectedMerge = [];
     submitted = null;
     if (!/\.html?$/i.test(f.name)) {
       parseErr = 'Only .html / .htm Belarc exports are accepted.';
@@ -147,7 +153,7 @@
       formData.append('dryRun', 'true');
       // With the asset known, the dry run also previews the diff vs. baseline
       if (selected) formData.append('assetId', selected.id);
-      const res = await fetch('/api/hardware-audit/scan', {
+      const res = await api.raw('/api/hardware-audit/scan', {
         method: 'POST',
         headers: { Authorization: `Bearer ${authStore.token}` },
         body: formData,
@@ -156,6 +162,8 @@
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       preview = body.parsedSpecs as ParsedSpecs;
       comparison = (body.comparison ?? null) as ComparisonResult | null;
+      merge = (body.merge ?? []) as MergeItem[];
+      selectedMerge = merge.filter((item) => item.state === 'apply').map((item) => item.key);
     } catch (e) {
       parseErr = (e as Error).message;
       file = null;
@@ -173,7 +181,8 @@
       const formData = new FormData();
       formData.append('file', file);
       formData.append('assetId', selected.id);
-      const res = await fetch('/api/hardware-audit/scan', {
+      formData.append('selectedFields', JSON.stringify(selectedMerge));
+      const res = await api.raw('/api/hardware-audit/scan', {
         method: 'POST',
         headers: { Authorization: `Bearer ${authStore.token}` },
         body: formData,
@@ -346,6 +355,25 @@
           <div class="warn-box">Comparison against baseline will run on submit.</div>
         {/if}
 
+        {#if selected}
+          <div class="merge-box">
+            <div class="merge-title">Optional asset field updates</div>
+            <div class="merge-note">Select only fields you want to copy from this report. Conflicts are never overwritten.</div>
+            {#if selected.name}
+              <div class="merge-callout">This scan is attached to the selected asset. To track a new device, create a minimal asset first, then upload its report.</div>
+            {/if}
+            <div class="merge-list">
+              {#each merge as item (item.key)}
+                <label class="merge-row" class:merge-disabled={item.state === 'conflict' || item.state === 'unavailable'}>
+                  <input type="checkbox" checked={selectedMerge.includes(item.key)} disabled={item.state === 'conflict' || item.state === 'unavailable' || item.state === 'verified'} onchange={(e) => { const checked = (e.currentTarget as HTMLInputElement).checked; selectedMerge = checked ? [...selectedMerge, item.key] : selectedMerge.filter((key) => key !== item.key); }} />
+                  <span class="merge-label">{item.label}</span>
+                  <span class="merge-state">{item.state === 'apply' ? `Apply: ${item.official ?? 'empty'}` : item.state === 'verified' ? 'Verified — no update' : item.state === 'conflict' ? 'Conflict — review on asset' : 'Not reported'}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <div class="actions">
           {#if submitted}
             <span class="ok">
@@ -442,6 +470,16 @@
     border: 1px solid var(--hairline-strong); border-radius: var(--r-sm, 6px);
     background: var(--canvas-soft); color: var(--body);
   }
+  .merge-box { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--hairline-strong); border-radius: var(--r-sm, 6px); background: var(--canvas-soft); }
+  .merge-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .merge-note, .merge-callout { margin-top: 5px; font-size: 12px; color: var(--mute); }
+  .merge-callout { padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--r-sm, 6px); color: var(--body); }
+  .merge-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .merge-row { display: grid; grid-template-columns: 18px 180px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+  .merge-row input { accent-color: var(--ink); }
+  .merge-label { color: var(--ink); font-weight: 500; }
+  .merge-state { color: var(--mute); word-break: break-word; }
+  .merge-disabled { opacity: .65; }
 
   .cmp {
     margin-top: 14px; padding: 12px 14px; font-size: 13px;
