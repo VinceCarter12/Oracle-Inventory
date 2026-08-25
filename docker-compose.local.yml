@@ -1,0 +1,26 @@
+version: "3.9"
+
+# Local-only development database. Fully isolated from any shared/production
+# Supabase target — this container has its own throwaway volume and never
+# talks to the internet. Never point this at a hosted deployment.
+services:
+  postgres:
+    image: postgres:17
+    container_name: oracle-inventory-local-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oracle_dev
+      POSTGRES_PASSWORD: oracle_dev_local_only
+      POSTGRES_DB: oracle_inventory_dev
+    ports:
+      - "55432:5432"
+    volumes:
+      - oracle-inventory-local-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oracle_dev -d oracle_inventory_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  oracle-inventory-local-db-data:
