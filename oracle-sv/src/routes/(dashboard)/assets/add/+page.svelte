@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -88,6 +89,13 @@
       api.get<Category[]>('/api/categories').catch(() => []),
       api.get<Branch[]>('/api/branches').catch(() => []),
     ]);
+    // Old /assets/add/computer bookmarks redirect here with ?type=computer —
+    // pre-select the first computer/laptop category so they still land
+    // somewhere useful instead of a blank generic form.
+    if ($page.url.searchParams.get('type') === 'computer' && !categoryId) {
+      const computerCategory = categories.find((c) => isComputerCategoryName(c.name));
+      if (computerCategory) categoryId = computerCategory.id;
+    }
   });
 
   $effect(() => {
