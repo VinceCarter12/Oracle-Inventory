@@ -82,5 +82,13 @@ ALTER TABLE "CameraChannelAssignment" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "SecretReference" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "AssetSecretReference" ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE "CameraProfile", "RecorderProfile", "RecorderChannel",
-  "CameraChannelAssignment", "SecretReference", "AssetSecretReference" FROM anon, authenticated;
+-- anon/authenticated only exist on Supabase-hosted Postgres; skip on a plain
+-- local/self-hosted database where there is no client-facing PostgREST role.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE "CameraProfile", "RecorderProfile", "RecorderChannel",
+      "CameraChannelAssignment", "SecretReference", "AssetSecretReference" FROM anon, authenticated;
+  END IF;
+END $$;

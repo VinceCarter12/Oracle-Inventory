@@ -46,6 +46,16 @@ ALTER TABLE "PortConnection" ADD CONSTRAINT "PortConnection_toPortId_fkey" FOREI
 ALTER TABLE "PortConnection" ADD CONSTRAINT "PortConnection_toInterfaceId_fkey" FOREIGN KEY ("toInterfaceId") REFERENCES "NetworkInterface"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "PortConnection" ADD CONSTRAINT "PortConnection_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- Baseline roles are normally created by prisma/seed.ts, but this migration's
+-- RolePermission inserts below need the rows to exist even on a fresh
+-- database where seed has not run yet.
+INSERT INTO "Role" ("id", "name", "description") VALUES
+  ('role-super-admin', 'super_admin', 'Full system access'),
+  ('role-admin', 'admin', 'Inventory and staff management'),
+  ('role-staff', 'staff', 'Inventory operations'),
+  ('role-viewer', 'viewer', 'Read-only access')
+ON CONFLICT ("id") DO NOTHING;
+
 INSERT INTO "Permission" ("id", "key", "description") VALUES
   ('perm-manage-infrastructure-assets', 'manage_infrastructure_assets', 'Manage network and infrastructure inventory'),
   ('perm-view-sensitive-network-fields', 'view_sensitive_network_fields', 'View sensitive network addressing and topology fields')
