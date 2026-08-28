@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
   import SearchInput from '$lib/components/SearchInput.svelte';
@@ -83,7 +84,7 @@
     }
   }
 
-  // ── Add Staff modal ────────────────────────────────────────────────────────
+  // ── Add Employee modal ────────────────────────────────────────────────────────
   let showAdd = $state(false);
   let adding  = $state(false);
   let addErr  = $state('');
@@ -114,7 +115,7 @@
   const totalWithAssets = $derived(employees.filter(e => e.assignments.length > 0).length);
 
   // ── Load ──────────────────────────────────────────────────────────────────
-  onMount(async () => {
+  async function loadEmployees() {
     try {
       const [empData, branchData, deptData] = await Promise.all([
         api.get<Employee[]>('/api/employees'),
@@ -129,9 +130,12 @@
     } finally {
       loading = false;
     }
-  });
+  }
 
-  // ── Add Staff ─────────────────────────────────────────────────────────────
+  onMount(() => { void loadEmployees(); });
+  onDestroy(onChange(['Employee', 'Branch', 'Department'], () => loadEmployees()));
+
+  // ── Add Employee ─────────────────────────────────────────────────────────────
   function openAdd() {
     addForm = { name: '', employeeId: '', branchId: '', departmentId: '', email: '', phone: '' };
     addErr = '';
@@ -139,8 +143,7 @@
   }
 
   async function saveAdd() {
-    if (!addForm.name.trim())       { addErr = 'Name is required.'; return; }
-    if (!addForm.employeeId.trim()) { addErr = 'Employee ID is required.'; return; }
+    if (!addForm.name.trim()) { addErr = 'Name is required.'; return; }
     adding = true; addErr = '';
     try {
       const created = await api.post<Employee>('/api/employees', {
@@ -169,9 +172,9 @@
   const SOURCE_CLASS: Record<EmpSource, string> = { imported: 'src-imported', excel: 'src-imported', zoho: 'src-zoho', manual: 'src-manual' };
 </script>
 
-<!-- ── Add Staff Modal ────────────────────────────────────────────────────── -->
-<Modal bind:open={showAdd} title="Add Staff Record" onclose={() => (addErr = '')}>
-  <p class="modal-note">Staff records are asset holders — they do not have login access to this system.</p>
+<!-- ── Add Employee Modal ────────────────────────────────────────────────── -->
+<Modal bind:open={showAdd} title="Add Employee" onclose={() => (addErr = '')}>
+  <p class="modal-note">Employee records are asset holders — they do not have login access to this system.</p>
   {#if addErr}<div class="form-err">{addErr}</div>{/if}
   <div class="form-grid">
     <div class="field">
@@ -179,8 +182,8 @@
       <input class="field-input" type="text" placeholder="Juan dela Cruz" bind:value={addForm.name} />
     </div>
     <div class="field">
-      <label class="field-label">Employee ID <span class="req">*</span></label>
-      <input class="field-input" type="text" placeholder="EMP-001" bind:value={addForm.employeeId} />
+      <label class="field-label">Employee ID</label>
+      <input class="field-input" type="text" placeholder="Auto-generated if left blank" bind:value={addForm.employeeId} />
     </div>
     <div class="field">
       <label class="field-label">Branch</label>
@@ -199,6 +202,7 @@
     <div class="field">
       <label class="field-label">Email</label>
       <input class="field-input" type="email" placeholder="juan@company.com" bind:value={addForm.email} />
+      <p class="field-hint">Matched against Zoho Directory if configured — fills in Employee ID / Department when left blank.</p>
     </div>
     <div class="field">
       <label class="field-label">Phone</label>
@@ -209,7 +213,7 @@
   {#snippet footer()}
     <button class="btn-ghost" onclick={() => { showAdd = false; addErr = ''; }} disabled={adding}>Cancel</button>
     <button class="btn-primary" onclick={saveAdd} disabled={adding}>
-      {adding ? 'Saving…' : 'Add Staff Record'}
+      {adding ? 'Saving…' : 'Add Employee'}
     </button>
   {/snippet}
 </Modal>
@@ -229,7 +233,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
           <path d="M12 5v14M5 12h14"/>
         </svg>
-        Add Staff
+        Add Employee
       </button>
     {/if}
   </div>
@@ -321,7 +325,7 @@
             <button class="btn-primary" onclick={() => goto('/assets/import')}>Import Assets</button>
           {/if}
           {#if can('manage_stock')}
-            <button class="btn-ghost" onclick={openAdd}>Add Staff Manually</button>
+            <button class="btn-ghost" onclick={openAdd}>Add Employee Manually</button>
           {/if}
         </div>
       </div>
@@ -512,6 +516,7 @@
   .req        { color: var(--error); }
   .field-input { height: 34px; padding: 0 10px; border: 1px solid var(--hairline); border-radius: var(--r-sm); background: var(--canvas); color: var(--ink); font-size: 13px; font-family: var(--font-sans); outline: none; width: 100%; box-sizing: border-box; }
   .field-input:focus { border-color: var(--link); box-shadow: 0 0 0 3px var(--link-bg-soft); }
+  .field-hint { font-size: 11.5px; color: var(--mute); margin: 0; font-family: var(--font-sans); }
 
   @media (max-width: 900px) { .stats-row { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .stats-row { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }

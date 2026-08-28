@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { authStore } from '$lib/stores/auth.svelte';
   import { goto } from '$app/navigation';
+  import { onChange } from '$lib/ws';
 
   const can = (key: string) => authStore.hasPermission(key);
   const canReview = () => can('approve_transactions') || can('manage_users');
@@ -75,6 +76,7 @@
     ]);
     await loadQueue();
   });
+  onDestroy(onChange(['ScanResult'], () => loadQueue()));
 
   async function loadQueue() {
     loading = true; loadError = '';
@@ -106,6 +108,7 @@
 
   async function submitAction() {
     if (!actionId || !actionType) return;
+    if (actionType === 'accept' && !acceptBrId) { actionError = 'Branch is required.'; return; }
     actionBusy = true; actionError = '';
     try {
       await api.patch(`/api/scan/admin/results/${actionId}`, {
@@ -134,6 +137,7 @@
 
   async function bulkAction(action: 'accept' | 'reject') {
     if (!selected.size) return;
+    if (action === 'accept' && !acceptBrId) { bulkError = 'Branch is required.'; return; }
     bulkBusy = true; bulkError = '';
     try {
       const res = await api.post<{ done: number; failed: { id: string }[] }>('/api/scan/admin/batch', {
@@ -194,9 +198,9 @@
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label">Branch (optional)</label>
+              <label class="field-label">Branch <span class="required">*</span></label>
               <select class="field-select" bind:value={acceptBrId}>
-                <option value="">— Unassigned —</option>
+                <option value="">— Select branch —</option>
                 {#each branches as b}<option value={b.id}>{b.name}</option>{/each}
               </select>
             </div>
@@ -282,7 +286,7 @@
                 {#each categories as c}<option value={c.id}>{c.name}</option>{/each}
               </select>
               <select class="filter-select-sm" bind:value={acceptBrId}>
-                <option value="">No branch</option>
+                <option value="">Branch (required to accept)</option>
                 {#each branches as b}<option value={b.id}>{b.name}</option>{/each}
               </select>
             </div>
@@ -485,6 +489,7 @@
   /* ── Form fields ── */
   .field-group { display: flex; flex-direction: column; gap: 5px; }
   .field-label { font-size: 12px; font-weight: 500; color: var(--body); font-family: var(--font-sans); }
+  .required { color: var(--error); }
   .field-select, .field-textarea { padding: 8px 11px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas-soft-2); color: var(--ink); font-size: 13.5px; font-family: var(--font-sans); outline: none; width: 100%; transition: border-color 120ms; }
   .field-select:focus, .field-textarea:focus { border-color: var(--link); }
   .field-textarea { resize: vertical; min-height: 72px; }

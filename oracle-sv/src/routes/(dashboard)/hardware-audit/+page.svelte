@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   interface Branch { id: string; name: string; }
   interface ScanRow {
@@ -51,6 +52,7 @@
     branches = await api.get<Branch[]>('/api/branches').catch(() => []);
     await load();
   });
+  onDestroy(onChange(['HardwareScan'], () => load()));
 
   function applyFilters() { page = 1; void load(); }
   function resetFilters() { fStatus = ''; fResult = ''; fBranch = ''; page = 1; void load(); }
@@ -111,9 +113,9 @@
     <!-- Summary chips -->
     {#if data}
       <div class="chips">
-        <span class="chip chip-red">🔴 {data.summary.mismatches} Mismatch{data.summary.mismatches === 1 ? '' : 'es'}</span>
-        <span class="chip chip-yellow">🟡 {data.summary.warnings} Warning{data.summary.warnings === 1 ? '' : 's'}</span>
-        <span class="chip chip-green">🟢 {data.summary.clean} Clean</span>
+        <span class="chip chip-red">{data.summary.mismatches} Mismatch{data.summary.mismatches === 1 ? '' : 'es'}</span>
+        <span class="chip chip-yellow">{data.summary.warnings} Warning{data.summary.warnings === 1 ? '' : 's'}</span>
+        <span class="chip chip-green">{data.summary.clean} Clean</span>
         {#if data.summary.pendingMismatches > 0}
           <span class="chip chip-pending">{data.summary.pendingMismatches} pending mismatch{data.summary.pendingMismatches === 1 ? '' : 'es'} need review</span>
         {/if}
@@ -140,11 +142,11 @@
               {#if scan.isBaseline}
                 <span class="badge badge-blue">Baseline</span>
               {:else if scan.overallStatus === 'mismatch'}
-                <span class="badge badge-red">🔴 Mismatch</span>
+                <span class="badge badge-red">Mismatch</span>
               {:else if scan.overallStatus === 'warning'}
-                <span class="badge badge-yellow">🟡 Warning</span>
+                <span class="badge badge-yellow">Warning</span>
               {:else if scan.overallStatus === 'match'}
-                <span class="badge badge-green">🟢 Match</span>
+                <span class="badge badge-green">Match</span>
               {:else}
                 <span class="badge badge-muted">No baseline</span>
               {/if}

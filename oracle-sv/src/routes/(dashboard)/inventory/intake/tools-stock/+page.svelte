@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 
   const CATEGORY_OPTIONS = [
     { value: 'hand_tools', label: 'Hand tools' },
@@ -28,31 +29,29 @@
     { value: 'other', label: 'Other' }
   ];
 
-  let sku = $state('');
-  let name = $state('');
-  let category = $state('hand_tools');
-  let categoryOther = $state('');
-  let unitOfMeasure = $state('piece');
-  let unitOfMeasureOther = $state('');
-  let description = $state('');
-  let isSerialized = $state(false);
-  let saving = $state(false);
-  let error = $state('');
-  let idempotencyKey = $state('');
+  let name                = $state('');
+  let category             = $state('hand_tools');
+  let categoryOther        = $state('');
+  let unitOfMeasure        = $state('piece');
+  let unitOfMeasureOther   = $state('');
+  let description          = $state('');
+  let isSerialized         = $state(false);
+  let saving               = $state(false);
+  let error                = $state('');
+  let idempotencyKey       = $state('');
 
   async function submit() {
     error = '';
     const resolvedCategory = category === 'other' ? categoryOther.trim() : category;
     const resolvedUnit = unitOfMeasure === 'other' ? unitOfMeasureOther.trim() : unitOfMeasure;
-    if (!sku.trim() || !name.trim() || !resolvedCategory || !resolvedUnit) {
-      error = 'SKU, item name, category, and unit of measure are required.';
+    if (!name.trim() || !resolvedCategory || !resolvedUnit) {
+      error = 'Item name, category, and unit of measure are required.';
       return;
     }
     saving = true;
     try {
       if (!idempotencyKey) idempotencyKey = crypto.randomUUID();
       await api.post('/api/stock/items', {
-        sku: sku.trim(),
         name: name.trim(),
         category: resolvedCategory,
         unitOfMeasure: resolvedUnit,
@@ -66,73 +65,171 @@
       saving = false;
     }
   }
+
+  function handleCancel() {
+    goto('/stock');
+  }
 </script>
 
 <svelte:head><title>Create Stock Item | Oracle Inventory</title></svelte:head>
 
 <div class="page">
-  <a class="back" href="/stock">← Tools & Stock</a>
-  <header>
-    <p class="eyebrow">Manual intake</p>
-    <h1>Create stock item</h1>
-    <p>Use this for quantity-managed inventory. Individually tracked or serialized equipment belongs in Asset intake.</p>
-  </header>
+  <Breadcrumb crumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Tools & Stock', href: '/stock' }, { label: 'Create Stock Item' }]} />
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Create stock item</h1>
+      <p class="page-sub">Use this for quantity-managed inventory. Individually tracked or serialized equipment belongs in Asset intake. SKU is generated automatically from the category.</p>
+    </div>
+    {#if can('manage_stock')}
+      <div class="header-actions">
+        <button type="button" class="btn-ghost" onclick={handleCancel} disabled={saving}>Cancel</button>
+        <button type="submit" form="stock-item-form" class="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Create stock item'}</button>
+      </div>
+    {/if}
+  </div>
 
   {#if !can('manage_stock')}
-    <section class="notice" role="alert"><h2>Permission required</h2><p>You do not have permission to create stock items.</p></section>
+    <div class="card notice-card">
+      <h2 class="notice-title">Permission required</h2>
+      <p class="notice-text">You do not have permission to create stock items.</p>
+    </div>
   {:else}
-    <form onsubmit={(event) => { event.preventDefault(); submit(); }} class="card">
-      <label for="sku">SKU <span aria-hidden="true">*</span></label>
-      <input id="sku" bind:value={sku} autocomplete="off" maxlength="80" />
+    {#if error}<div class="form-error">{error}</div>{/if}
 
-      <label for="name">Item name <span aria-hidden="true">*</span></label>
-      <input id="name" bind:value={name} maxlength="160" />
-
-      <div class="two-up">
-        <div>
-          <label for="category">Category <span aria-hidden="true">*</span></label>
-          <select id="category" bind:value={category}>
-            {#each CATEGORY_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
-          </select>
-          {#if category === 'other'}<input class="other-input" bind:value={categoryOther} placeholder="Enter category" maxlength="80" />{/if}
+    <form id="stock-item-form" onsubmit={(event) => { event.preventDefault(); submit(); }} class="form-body">
+      <section class="card">
+        <div class="card-header">
+          <h2 class="card-title">Item details</h2>
         </div>
-        <div>
-          <label for="unit">Unit of measure <span aria-hidden="true">*</span></label>
-          <select id="unit" bind:value={unitOfMeasure}>
-            {#each UNIT_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
-          </select>
-          {#if unitOfMeasure === 'other'}<input class="other-input" bind:value={unitOfMeasureOther} placeholder="Enter unit" maxlength="40" />{/if}
+        <div class="card-body">
+          <div class="fields-grid">
+            <div class="field">
+              <label class="field-label" for="name">Item name <span class="required">*</span></label>
+              <input id="name" class="field-input" bind:value={name} maxlength="160" placeholder="e.g. Cat5e cable, 305m box" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="category">Category <span class="required">*</span></label>
+              <select id="category" class="field-select" bind:value={category}>
+                {#each CATEGORY_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
+              </select>
+              {#if category === 'other'}
+                <input class="field-input" style="margin-top: 8px;" bind:value={categoryOther} placeholder="Enter category" maxlength="80" />
+              {/if}
+            </div>
+            <div class="field">
+              <label class="field-label" for="unit">Unit of measure <span class="required">*</span></label>
+              <select id="unit" class="field-select" bind:value={unitOfMeasure}>
+                {#each UNIT_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}
+              </select>
+              {#if unitOfMeasure === 'other'}
+                <input class="field-input" style="margin-top: 8px;" bind:value={unitOfMeasureOther} placeholder="Enter unit" maxlength="40" />
+              {/if}
+            </div>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" class="checkbox" bind:checked={isSerialized} />
+            <span class="checkbox-label">This stock is serialized</span>
+          </label>
+
+          <div class="field field-textarea">
+            <label class="field-label" for="description">Description <span class="optional">(optional)</span></label>
+            <textarea id="description" class="field-textarea-input" bind:value={description} rows="4" maxlength="1000"></textarea>
+          </div>
         </div>
-      </div>
-
-      <label class="check"><input type="checkbox" bind:checked={isSerialized} /> This stock is serialized</label>
-
-      <label for="description">Description <span class="optional">(optional)</span></label>
-      <textarea id="description" bind:value={description} rows="4" maxlength="1000"></textarea>
-
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <div class="actions"><button type="button" class="ghost" onclick={() => goto('/stock')}>Cancel</button><button type="submit" class="primary" disabled={saving}>{saving ? 'Saving…' : 'Create stock item'}</button></div>
+      </section>
     </form>
   {/if}
 </div>
 
 <style>
-  .page { max-width: 760px; margin: 0 auto; padding: 32px 24px 48px; }
-  .back { color: var(--body); text-decoration: none; font-size: 14px; }
-  header { margin: 24px 0; } .eyebrow { margin: 0 0 5px; color: var(--mute); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-  h1 { margin: 0; color: var(--ink); font-size: 32px; letter-spacing: -.035em; } header p:last-child { color: var(--body); margin-bottom: 0; }
-  .card, .notice { border: 1px solid var(--hairline); border-radius: 10px; background: var(--canvas); padding: 22px; }
-  label { display: block; margin: 18px 0 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
-  input:not([type='checkbox']), select, textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--hairline); border-radius: 7px; padding: 9px; min-height: 36px; color: var(--ink); background: var(--canvas); font: inherit; }
-  .other-input { margin-top: 8px; }
-  textarea { min-height: 80px; resize: vertical; } .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; } .two-up label { margin-top: 18px; }
-  .check { display: flex; gap: 9px; align-items: center; font-weight: 500; margin-top: 18px; } .check input { inline-size: 16px; block-size: 16px; }
-  .optional { color: var(--mute); font-weight: 400; } .error { color: var(--error); margin: 18px 0 0; }
-  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
-  button { font: inherit; border: 1px solid var(--hairline); background: var(--canvas); color: var(--ink); border-radius: 7px; padding: 8px 13px; cursor: pointer; }
-  button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-  .primary { background: var(--ink); color: var(--on-primary); border-color: var(--ink); }
-  .ghost { background: transparent; }
-  button:disabled { cursor: wait; opacity: .55; }
-  @media (max-width: 640px) { .page { padding: 24px 16px; } .two-up { grid-template-columns: 1fr; gap: 0; } .actions { justify-content: space-between; } }
+  .page { display: flex; flex-direction: column; gap: 16px; }
+
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .page-title  { font-size: 20px; font-weight: 600; letter-spacing: -0.025em; color: var(--ink); }
+  .page-sub    { font-size: 13px; color: var(--mute); margin-top: 3px; max-width: 560px; }
+
+  .header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: var(--r-md);
+    font-size: 13px; font-weight: 500; font-family: var(--font-sans);
+    cursor: pointer; border: none;
+    background: var(--ink); color: var(--on-primary);
+    transition: opacity 120ms ease; line-height: 1;
+  }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: var(--r-md);
+    font-size: 13px; font-weight: 500; font-family: var(--font-sans);
+    cursor: pointer; border: 1px solid var(--hairline);
+    background: var(--canvas); color: var(--ink);
+    transition: background 100ms ease; line-height: 1;
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--canvas-soft-2); }
+  .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .form-body { display: flex; flex-direction: column; gap: 16px; }
+
+  .card { background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); }
+  .card-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--hairline); }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--ink); font-family: var(--font-sans); letter-spacing: -0.2px; }
+  .card-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .notice-card { padding: 20px; }
+  .notice-title { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0 0 6px; }
+  .notice-text { font-size: 13px; color: var(--body); margin: 0; }
+
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 12.5px; font-weight: 500; color: var(--body); font-family: var(--font-sans); letter-spacing: -0.1px; }
+  .required { color: var(--error); }
+  .optional { color: var(--mute); font-weight: 400; }
+
+  .field-input, .field-select {
+    height: 34px; padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: var(--r-sm);
+    background: var(--canvas); color: var(--ink);
+    font-size: 13.5px; font-family: var(--font-sans);
+    outline: none; transition: border-color 120ms ease, box-shadow 120ms ease;
+    width: 100%;
+  }
+  .field-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+    cursor: pointer;
+  }
+  .field-input:focus, .field-select:focus { border-color: var(--link); box-shadow: 0 0 0 3px var(--link-bg-soft); }
+  .field-input::placeholder { color: var(--mute); }
+
+  .field-textarea-input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--hairline); border-radius: var(--r-sm);
+    background: var(--canvas); color: var(--ink);
+    font-size: 13.5px; font-family: var(--font-sans);
+    outline: none; resize: vertical; line-height: 1.5;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .field-textarea-input:focus { border-color: var(--link); box-shadow: 0 0 0 3px var(--link-bg-soft); }
+
+  .checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .checkbox { width: 15px; height: 15px; accent-color: var(--link); cursor: pointer; flex-shrink: 0; }
+  .checkbox-label { font-size: 13.5px; font-weight: 500; color: var(--ink); font-family: var(--font-sans); }
+
+  .form-error {
+    padding: 10px 14px; background: var(--error-soft); color: var(--error);
+    border-radius: var(--r-sm); font-size: 13px; font-family: var(--font-sans);
+  }
+
+  @media (max-width: 900px) { .fields-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { .page-header { flex-direction: column; } .header-actions { width: 100%; } .header-actions .btn-ghost, .header-actions .btn-primary { flex: 1; justify-content: center; } }
 </style>

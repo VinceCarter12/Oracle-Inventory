@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { slide } from 'svelte/transition';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   type Condition  = 'usable' | 'for_repair' | 'for_disposal';
   type AssetStatus = 'assigned' | 'available' | 'for_repair' | 'for_disposal' | 'lost' | 'stolen';
@@ -60,7 +61,7 @@
     KPI[3].value = (s.forRepair ?? 0).toLocaleString();
   }
 
-  onMount(async () => {
+  async function loadAssets() {
     loadErr = '';
     try {
       const [raw, s] = await Promise.all([
@@ -74,7 +75,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadAssets(); });
+  onDestroy(onChange(['Asset', 'Assignment'], () => loadAssets()));
 
   // ── Core state ───────────────────────────────────────────────────────────────
   let showStatistics = $state(true);

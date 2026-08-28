@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
@@ -8,6 +8,7 @@
   import Pagination from '$lib/components/Pagination.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   interface Branch {
     id: string;
@@ -50,7 +51,7 @@
   let editErr     = $state('');
   let editForm    = $state({ name: '', address: '', latitude: '', longitude: '' });
 
-  onMount(async () => {
+  async function loadBranches() {
     try {
       branches = await api.get<Branch[]>('/api/branches');
     } catch (e) {
@@ -58,7 +59,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadBranches(); });
+  onDestroy(onChange(['Branch'], () => loadBranches()));
 
   const filtered = $derived(
     branches.filter(b => {

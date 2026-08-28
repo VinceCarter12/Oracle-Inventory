@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { onChange } from '$lib/ws';
 
   const can = (k: string) => authStore.hasPermission(k);
 
@@ -50,6 +51,7 @@
     if (!can('import_inventory')) { goto('/assets'); return; }
     load();
   });
+  onDestroy(onChange(['Import', 'ImportHistory'], () => load()));
 
   function statusColor(s: string) {
     if (s === 'completed') return 'badge-completed';

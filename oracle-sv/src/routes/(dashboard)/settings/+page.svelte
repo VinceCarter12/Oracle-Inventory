@@ -1,19 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { onChange } from '$lib/ws';
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.svelte';
   import { api } from '$lib/api';
 
   /* ── Active subnav panel ── */
   let activePanel = $state('general');
-
-  /* ── General / Notifications state ── */
-  let notifyDaily      = $state(true);
-  let notifyNewEvent   = $state(true);
-  let notifyNewTeam    = $state(false);
-  let pushEnabled      = $state(true);
-  let desktopEnabled   = $state(true);
-  let emailEnabled     = $state(false);
 
   /* ── My Settings state ── */
   let appearance = $state<'light' | 'dark' | 'system'>('light');
@@ -236,44 +229,7 @@
     }
   });
 
-  /* ── Asset numbering state ── */
-  let assetPrefix   = $state('AST');
-  let assetStartNum = $state('1000');
-  let assetPadding  = $state('4');
-  let assetSaved    = $state(false);
 
-  function saveAsset() {
-    assetSaved = true;
-    setTimeout(() => { assetSaved = false; }, 2200);
-  }
-
-  /* ── Assignment rules state ── */
-  let requireApproval = $state(false);
-  let notifyOnReturn  = $state(true);
-  let assignSaved     = $state(false);
-
-  function saveAssign() {
-    assignSaved = true;
-    setTimeout(() => { assignSaved = false; }, 2200);
-  }
-
-  /* ── Security state ── */
-  let sessionTimeout = $state('30');
-  let auditLog       = $state(true);
-  let secSaved       = $state(false);
-
-  function saveSecurity() {
-    secSaved = true;
-    setTimeout(() => { secSaved = false; }, 2200);
-  }
-
-  /* ── Data / export state ── */
-  let exportFeedback = $state('');
-
-  function handleExport(format: string) {
-    exportFeedback = `${format} export started — your download will begin shortly.`;
-    setTimeout(() => { exportFeedback = ''; }, 3000);
-  }
 
   /* ── Sliding pill ── */
   let itemRefs: Record<string, HTMLButtonElement> = $state({});
@@ -296,12 +252,6 @@
     ]},
     { section: 'INVENTORY', items: [
       { id: 'categories',    label: 'Categories'       },
-      { id: 'asset-numbers', label: 'Asset Numbering'  },
-      { id: 'assignments',   label: 'Assignment Rules' },
-    ]},
-    { section: 'WORKSPACE', items: [
-      { id: 'security',      label: 'Security' },
-      { id: 'data',          label: 'Data & Export' },
     ]},
   ];
 
@@ -335,6 +285,7 @@
       })
       .catch(() => {/* keep store values */});
   });
+  onDestroy(onChange(['Category'], () => loadCategories()));
 </script>
 
 <div class="page">
@@ -395,80 +346,8 @@
       {#if activePanel === 'general'}
         <div class="panel">
           <div class="panel-header">
-            <h2 class="panel-title">My Notifications</h2>
-          </div>
-
-          <div class="section-block">
-            <div class="section-row-head">
-              <span class="section-label">Notify me when…</span>
-            </div>
-            <div class="check-list">
-              <label class="check-row">
-                <input type="checkbox" class="check-input" bind:checked={notifyDaily} />
-                <span class="check-label">Daily inventory summary email</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" class="check-input" bind:checked={notifyNewEvent} />
-                <span class="check-label">New asset assignment created</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" class="check-input" bind:checked={notifyNewTeam} />
-                <span class="check-label">Added to a new branch or team</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Mobile push notifications</div>
-              <div class="toggle-sub">Receive push alerts when your organization requires attention</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={pushEnabled}
-              role="switch"
-              aria-checked={pushEnabled}
-              onclick={() => { pushEnabled = !pushEnabled; }}
-              aria-label="Toggle mobile push notifications"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Desktop notifications</div>
-              <div class="toggle-sub">Receive desktop alerts when your organization requires attention</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={desktopEnabled}
-              role="switch"
-              aria-checked={desktopEnabled}
-              onclick={() => { desktopEnabled = !desktopEnabled; }}
-              aria-label="Toggle desktop notifications"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Email notification</div>
-              <div class="toggle-sub">Receive email whenever your organization requires attention</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={emailEnabled}
-              role="switch"
-              aria-checked={emailEnabled}
-              onclick={() => { emailEnabled = !emailEnabled; }}
-              aria-label="Toggle email notifications"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="panel-header" style="margin-top: 4px;">
-            <h2 class="panel-title">My Settings</h2>
+            <h2 class="panel-title">General</h2>
+            <p class="panel-sub">Customize how Oracle Inventory looks on your device.</p>
           </div>
 
           <!-- Appearance -->
@@ -688,232 +567,6 @@
           <p class="cat-hint">Categories with assets cannot be deleted.</p>
         </div>
 
-      {:else if activePanel === 'asset-numbers'}
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Asset Numbering</h2>
-            <p class="panel-sub">Configure how asset IDs are generated across your inventory.</p>
-          </div>
-
-          <div class="info-box">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Preview: <strong>{assetPrefix}-{String(parseInt(assetStartNum)).padStart(parseInt(assetPadding), '0')}</strong>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-field">
-              <label class="form-label" for="an-prefix">Asset prefix</label>
-              <input id="an-prefix" class="form-input" type="text" bind:value={assetPrefix} maxlength="6" placeholder="e.g. AST" />
-            </div>
-            <div class="form-field">
-              <label class="form-label" for="an-start">Starting number</label>
-              <input id="an-start" class="form-input" type="number" bind:value={assetStartNum} min="1" />
-            </div>
-            <div class="form-field">
-              <label class="form-label" for="an-pad">Zero padding (digits)</label>
-              <select id="an-pad" class="form-input form-select" bind:value={assetPadding}>
-                <option value="3">3 digits (001)</option>
-                <option value="4">4 digits (0001)</option>
-                <option value="5">5 digits (00001)</option>
-                <option value="6">6 digits (000001)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn-primary" onclick={saveAsset}>
-              {#if assetSaved}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                Saved
-              {:else}
-                Save format
-              {/if}
-            </button>
-            <button class="btn-ghost" onclick={() => { assetPrefix = 'AST'; assetStartNum = '1000'; assetPadding = '4'; }}>
-              Reset defaults
-            </button>
-          </div>
-        </div>
-
-      <!-- ═══ ASSIGNMENT RULES ═══════════════════════════════════════════════ -->
-      {:else if activePanel === 'assignments'}
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Assignment Rules</h2>
-            <p class="panel-sub">Control how assets are assigned to employees.</p>
-          </div>
-
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Require manager approval</div>
-              <div class="toggle-sub">New asset assignments must be approved by a manager before taking effect.</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={requireApproval}
-              role="switch"
-              aria-checked={requireApproval}
-              onclick={() => { requireApproval = !requireApproval; }}
-              aria-label="Toggle approval requirement"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Notify on asset return</div>
-              <div class="toggle-sub">Send a notification when an employee returns an asset.</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={notifyOnReturn}
-              role="switch"
-              aria-checked={notifyOnReturn}
-              onclick={() => { notifyOnReturn = !notifyOnReturn; }}
-              aria-label="Toggle return notification"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="form-actions" style="margin-top: 20px;">
-            <button class="btn-primary" onclick={saveAssign}>
-              {#if assignSaved}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                Saved
-              {:else}
-                Save rules
-              {/if}
-            </button>
-            <button class="btn-ghost" onclick={() => { requireApproval = false; notifyOnReturn = true; }}>
-              Reset defaults
-            </button>
-          </div>
-        </div>
-
-      <!-- ═══ SECURITY ══════════════════════════════════════════════════════ -->
-      {:else if activePanel === 'security'}
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Security</h2>
-            <p class="panel-sub">Protect your account and review audit activity.</p>
-          </div>
-
-          <!-- Audit log -->
-          <div class="toggle-row">
-            <div class="toggle-text">
-              <div class="toggle-title">Audit log</div>
-              <div class="toggle-sub">Record all admin actions for compliance and review.</div>
-            </div>
-            <button
-              class="toggle-switch"
-              class:on={auditLog}
-              role="switch"
-              aria-checked={auditLog}
-              onclick={() => { auditLog = !auditLog; }}
-              aria-label="Toggle audit log"
-            ><span class="toggle-thumb"></span></button>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="form-grid" style="max-width:320px">
-            <div class="form-field">
-              <label class="form-label" for="sec-timeout">Session timeout (minutes)</label>
-              <select id="sec-timeout" class="form-input form-select" bind:value={sessionTimeout}>
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="60">1 hour</option>
-                <option value="120">2 hours</option>
-                <option value="480">8 hours</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn-primary" onclick={saveSecurity}>
-              {#if secSaved}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                Saved
-              {:else}
-                Save security settings
-              {/if}
-            </button>
-          </div>
-        </div>
-
-      <!-- ═══ DATA & EXPORT ══════════════════════════════════════════════════ -->
-      {:else if activePanel === 'data'}
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Data & Export</h2>
-            <p class="panel-sub">Download or import your inventory data.</p>
-          </div>
-
-          {#if exportFeedback}
-            <div class="feedback-bar">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-              {exportFeedback}
-            </div>
-          {/if}
-
-          <div class="export-cards">
-            <div class="export-card">
-              <div class="export-card-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-              </div>
-              <div class="export-card-body">
-                <div class="export-card-title">Full inventory export</div>
-                <div class="export-card-sub">All assets, employees, assignments, and sites</div>
-              </div>
-              <div class="export-card-actions">
-                <button class="btn-ghost btn-sm" onclick={() => handleExport('CSV')}>Export CSV</button>
-                <button class="btn-ghost btn-sm" onclick={() => handleExport('PDF')}>Export PDF</button>
-              </div>
-            </div>
-
-            <div class="export-card">
-              <div class="export-card-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-              </div>
-              <div class="export-card-body">
-                <div class="export-card-title">Assets only</div>
-                <div class="export-card-sub">Asset records with categories, status, and branch</div>
-              </div>
-              <div class="export-card-actions">
-                <button class="btn-ghost btn-sm" onclick={() => handleExport('Assets CSV')}>Export CSV</button>
-              </div>
-            </div>
-
-            <div class="export-card">
-              <div class="export-card-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              </div>
-              <div class="export-card-body">
-                <div class="export-card-title">Employees only</div>
-                <div class="export-card-sub">Employee list with department and assigned assets</div>
-              </div>
-              <div class="export-card-actions">
-                <button class="btn-ghost btn-sm" onclick={() => handleExport('Employees CSV')}>Export CSV</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="panel-header" style="margin-top: 4px;">
-            <h2 class="panel-title" style="font-size: 14px;">Import data</h2>
-          </div>
-
-          <div class="import-box">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <div class="import-text">
-              <div class="import-title">Upload a CSV file</div>
-              <div class="import-sub">Accepted format: CSV with headers matching the export template</div>
-            </div>
-            <label class="btn-ghost btn-sm import-label" aria-label="Upload CSV file">
-              <input type="file" accept=".csv" class="visually-hidden" onchange={() => handleExport('Import processed')} />
-              Choose file
-            </label>
-          </div>
-        </div>
       {/if}
 
     {/key}

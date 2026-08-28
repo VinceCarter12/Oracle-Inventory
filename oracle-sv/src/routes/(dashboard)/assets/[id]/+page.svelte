@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { onChange } from '$lib/ws';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
@@ -121,7 +122,7 @@
   }
 
   // ── Load ──────────────────────────────────────────────────────────────────
-  onMount(async () => {
+  async function loadAsset() {
     try {
       const [assetData, catData, branchData] = await Promise.all([
         api.get<ApiAsset>(`/api/assets/${$page.params.id}`),
@@ -138,7 +139,50 @@
     }
     // Hardware audit data loads independently — a failure here never blanks the page
     void loadHardware();
-  });
+    void loadInfra();
+    void loadAttachments();
+  }
+
+  onMount(() => { void loadAsset(); });
+  onDestroy(onChange(['Asset', 'CameraProfile', 'RecorderProfile', 'CameraChannelAssignment', 'ServerRoleAssignment'], () => loadAsset()));
+
+  interface Attachment {
+    id: string; fileName: string; mimeType: string; fileSize: number; createdAt: string;
+    uploadedBy?: { id: string; name: string } | null;
+  }
+  let attachments      = $state<Attachment[]>([]);
+  let attachmentsErr   = $state('');
+  let downloadingId    = $state('');
+
+  async function loadAttachments() {
+    attachments = await api.get<Attachment[]>(`/api/assets/${$page.params.id}/attachments`).catch(() => []);
+  }
+
+  function fmtSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function downloadAttachment(item: Attachment) {
+    downloadingId = item.id;
+    attachmentsErr = '';
+    try {
+      const res = await api.raw(`/api/assets/attachments/${item.id}/download`);
+      if (!res.ok) throw new Error('Unable to download attachment.');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = item.fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      attachmentsErr = (e as Error).message;
+    } finally {
+      downloadingId = '';
+    }
+  }
 
   async function loadHardware() {
     const id = $page.params.id;
@@ -327,6 +371,111 @@
       showRecoverModal = false;
     } catch (e) { recoverErr = (e as Error).message; }
     finally { recoverBusy = false; }
+  }
+
+  // ── Infra config: camera/recorder profile + channel assignment, network
+  //    interfaces/IP, server profile + roles. Loads only when the asset's own
+  //    category matches, since these are separate typed tables (not part of
+  //    the base Asset response). ───────────────────────────────────────────────
+  // Servers & Circuits (Server profile/roles, and the Firewall/Server share of
+  // the Network section) HIDDEN 2026-08-26 per user request — not enough time
+  // to support that surface right now. SERVER_SPECS_ENABLED forces it off
+  // without deleting the implementation; flip back to true to re-enable.
+  const SERVER_SPECS_ENABLED = false;
+  const isCameraAsset   = $derived(/camera|cctv/i.test(asset?.category?.name ?? ''));
+  const isRecorderAsset = $derived(/nvr|dvr|recorder/i.test(asset?.category?.name ?? ''));
+  const isNetworkAsset  = $derived(/access.?point|\bap\b|switch/i.test(asset?.category?.name ?? '') || (SERVER_SPECS_ENABLED && /firewall|server/i.test(asset?.category?.name ?? '')));
+  const isServerAsset   = $derived(SERVER_SPECS_ENABLED && /server/i.test(asset?.category?.name ?? ''));
+
+  interface CameraInfo { id: string; asset: { id: string }; physicalLocation: string; cameraType: string; resolution: string | null; nightVision: boolean | null; motionDetection: boolean | null; assignments: { channel: { channelNumber: number; recorder: { assetId: string; physicalLocation: string } } }[]; }
+  interface RecorderChannel { id: string; channelNumber: number; enabled: boolean; assignments: { camera: { asset: { id: string; name: string } } }[]; }
+  interface RecorderInfo { id: string; assetId: string; physicalLocation: string; channelCapacity: number; channels: RecorderChannel[]; asset: { name: string }; }
+  interface NetIface { id: string; interfaceName: string; macAddress: string | null; }
+  interface IpObs { address: string; prefixLength: number; addressingMode: string; observedAt: string; }
+  interface ServerEntry { asset: { id: string }; environment: string; criticality: string; virtualizationRole: string; roles: { id: string; roleType: string; roleName: string | null; isPrimary: boolean; validFrom: string; validTo: string | null }[]; }
+
+  let cameraInfo    = $state<CameraInfo | null>(null);
+  let recorders     = $state<RecorderInfo[]>([]);
+  let netInterfaces = $state<(NetIface & { ips: IpObs[] })[]>([]);
+  let serverEntry   = $state<ServerEntry | null>(null);
+  let infraLoading  = $state(false);
+  let infraErr      = $state('');
+
+  async function loadInfra() {
+    infraErr = '';
+    try {
+      if (isCameraAsset) {
+        const list = await api.get<{ items: CameraInfo[] }>('/api/cctv/cameras?pageSize=100');
+        cameraInfo = list.items.find((c) => c.asset?.id === assetId) ?? null;
+      }
+      if (isRecorderAsset || isCameraAsset) {
+        const list = await api.get<{ items: RecorderInfo[] }>('/api/cctv/recorders?pageSize=100');
+        recorders = list.items;
+      }
+      if (isNetworkAsset) {
+        const ifaces = await api.get<{ items: NetIface[] }>(`/api/network/interfaces?assetId=${assetId}`);
+        netInterfaces = await Promise.all(ifaces.items.map(async (i) => ({
+          ...i,
+          ips: await api.get<{ items: IpObs[] }>(`/api/network/interfaces/${i.id}/ip-observations`).then((r) => r.items).catch(() => []),
+        })));
+      }
+      if (isServerAsset) {
+        const list = await api.get<{ items: ServerEntry[] }>('/api/servers?pageSize=100');
+        serverEntry = list.items.find((s) => s.asset.id === assetId) ?? null;
+      }
+    } catch (e) {
+      infraErr = (e as Error).message;
+    }
+  }
+
+  // ── Assign camera to recorder channel ───────────────────────────────────────
+  let showAssignModal = $state(false);
+  let assignChannelId = $state('');
+  let assignBusy       = $state(false);
+  let assignErr        = $state('');
+
+  const availableChannels = $derived(
+    recorders.flatMap((r) => r.channels.filter((c) => c.enabled && c.assignments.length === 0).map((c) => ({ id: c.id, label: `${r.asset.name} · Channel ${c.channelNumber}` })))
+  );
+
+  function openAssignModal() {
+    assignChannelId = ''; assignErr = ''; showAssignModal = true;
+  }
+
+  async function confirmAssign() {
+    if (!cameraInfo || !assignChannelId) { assignErr = 'Choose a channel.'; return; }
+    assignBusy = true; assignErr = '';
+    try {
+      await api.post('/api/cctv/channel-assignments', {
+        cameraId: cameraInfo.id, channelId: assignChannelId,
+      }, { 'Idempotency-Key': crypto.randomUUID() });
+      showAssignModal = false;
+      await loadInfra();
+    } catch (e) { assignErr = (e as Error).message; }
+    finally { assignBusy = false; }
+  }
+
+  // ── Add server role ──────────────────────────────────────────────────────────
+  let showRoleModal = $state(false);
+  let roleType       = $state('domain_controller');
+  let roleIsPrimary  = $state(false);
+  let roleBusy       = $state(false);
+  let roleErr        = $state('');
+
+  function openRoleModal() {
+    roleType = 'domain_controller'; roleIsPrimary = false; roleErr = ''; showRoleModal = true;
+  }
+
+  async function confirmAddRole() {
+    roleBusy = true; roleErr = '';
+    try {
+      await api.post(`/api/servers/${assetId}/roles`, {
+        roleType, isPrimary: roleIsPrimary,
+      }, { 'Idempotency-Key': crypto.randomUUID() });
+      showRoleModal = false;
+      await loadInfra();
+    } catch (e) { roleErr = (e as Error).message; }
+    finally { roleBusy = false; }
   }
 </script>
 
@@ -546,6 +695,111 @@
           </div>
         {/if}
 
+        <!-- Camera profile + channel assignment -->
+        {#if isCameraAsset}
+          <div class="rp-section" aria-labelledby="camera-profile-title">
+            <div class="section-head"><span class="section-title" id="camera-profile-title">Camera profile</span></div>
+            {#if infraErr}<div class="act-empty" style="color:var(--error);">{infraErr}</div>{/if}
+            {#if !cameraInfo}
+              <div class="act-empty">No camera profile found for this asset.</div>
+            {:else}
+              <div class="field-grid">
+                <div class="field"><span class="field-label">Physical location</span><span class="field-value">{cameraInfo.physicalLocation}</span></div>
+                <div class="field"><span class="field-label">Camera type</span><span class="field-value">{cameraInfo.cameraType}</span></div>
+                <div class="field"><span class="field-label">Resolution</span><span class="field-value">{cameraInfo.resolution ?? '—'}</span></div>
+                <div class="field"><span class="field-label">Night vision</span><span class="field-value">{cameraInfo.nightVision ? 'Yes' : 'No'}</span></div>
+                <div class="field"><span class="field-label">Motion detection</span><span class="field-value">{cameraInfo.motionDetection ? 'Yes' : 'No'}</span></div>
+                <div class="field">
+                  <span class="field-label">Channel assignment</span>
+                  {#if cameraInfo.assignments[0]}
+                    <span class="field-value">Channel {cameraInfo.assignments[0].channel.channelNumber} · {cameraInfo.assignments[0].channel.recorder.physicalLocation}</span>
+                  {:else}
+                    <span class="field-value">Unassigned</span>
+                  {/if}
+                </div>
+              </div>
+              {#if !cameraInfo.assignments[0] && can('manage_infrastructure_assets')}
+                <button type="button" class="btn-sm" onclick={openAssignModal} style="margin-top:10px;">Assign to NVR channel</button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Recorder channel board -->
+        {#if isRecorderAsset}
+          {@const recorder = recorders.find((r) => r.assetId === assetId)}
+          <div class="rp-section" aria-labelledby="recorder-profile-title">
+            <div class="section-head"><span class="section-title" id="recorder-profile-title">Recorder channels</span></div>
+            {#if !recorder}
+              <div class="act-empty">No recorder profile found for this asset.</div>
+            {:else}
+              <div class="component-list" aria-label="Recorder channels">
+                {#each recorder.channels as channel}
+                  <div class="component-item">
+                    <strong>Channel {channel.channelNumber}</strong>
+                    <span>{channel.enabled ? 'Enabled' : 'Disabled'}</span>
+                    <span>{channel.assignments[0]?.camera.asset.name ?? 'Unassigned'}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Network interfaces + IP -->
+        {#if isNetworkAsset}
+          <div class="rp-section" aria-labelledby="network-profile-title">
+            <div class="section-head"><span class="section-title" id="network-profile-title">Network</span></div>
+            {#if netInterfaces.length === 0}
+              <div class="act-empty">No interfaces recorded yet. Add one from <a href="/inventory/intake/network">Network Intake</a>.</div>
+            {:else}
+              <div class="component-list" aria-label="Network interfaces">
+                {#each netInterfaces as iface}
+                  <div class="component-item">
+                    <strong>{iface.interfaceName}</strong>
+                    <span>{iface.macAddress ?? 'No MAC'}</span>
+                    <span>{iface.ips[0] ? `${iface.ips[0].address}/${iface.ips[0].prefixLength} (${iface.ips[0].addressingMode})` : 'No IP recorded'}</span>
+                  </div>
+                {/each}
+              </div>
+              <a class="link-add-more" href="/inventory/intake/network">+ Add another interface or IP</a>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Server profile + roles -->
+        {#if isServerAsset}
+          <div class="rp-section" aria-labelledby="server-profile-title">
+            <div class="section-head"><span class="section-title" id="server-profile-title">Server roles</span></div>
+            {#if !serverEntry}
+              <div class="act-empty">No server profile found for this asset. Add one from <a href="/inventory/intake/server">Server Intake</a>.</div>
+            {:else}
+              <div class="field-grid">
+                <div class="field"><span class="field-label">Environment</span><span class="field-value">{serverEntry.environment}</span></div>
+                <div class="field"><span class="field-label">Criticality</span><span class="field-value">{serverEntry.criticality}</span></div>
+                <div class="field"><span class="field-label">Virtualization</span><span class="field-value">{serverEntry.virtualizationRole.replace('_', ' ')}</span></div>
+              </div>
+              <h3 class="subsection-title">Roles</h3>
+              {#if serverEntry.roles.length === 0}
+                <div class="act-empty">No roles assigned yet.</div>
+              {:else}
+                <div class="component-list" aria-label="Server roles">
+                  {#each serverEntry.roles as role}
+                    <div class="component-item">
+                      <strong>{role.roleType.replace('_', ' ')}</strong>
+                      <span>{role.roleName ?? '—'}</span>
+                      <span>{role.isPrimary ? 'Primary' : ''}{role.validTo ? ' · Ended' : ''}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              {#if can('manage_infrastructure_assets')}
+                <button type="button" class="btn-sm" onclick={openRoleModal} style="margin-top:10px;">+ Add role</button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
         <!-- Recent Activity section -->
         <div class="rp-section">
           <div class="section-head">
@@ -580,6 +834,32 @@
           </div>
         </div>
 
+        <!-- Attachments section -->
+        <div class="rp-section">
+          <div class="section-head">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            <span class="section-title">Attachments</span>
+          </div>
+          {#if attachmentsErr}<div class="hw-err">{attachmentsErr}</div>{/if}
+          <div class="activity-list">
+            {#if attachments.length === 0}
+              <div class="act-empty">No attachments uploaded yet.</div>
+            {:else}
+              {#each attachments as item}
+                <div class="activity-item">
+                  <div class="act-body">
+                    <span class="act-desc">{item.fileName}</span>
+                    <span class="act-date">{fmtSize(item.fileSize)} · {fmtDate(item.createdAt)}{item.uploadedBy ? ` · ${item.uploadedBy.name}` : ''}</span>
+                  </div>
+                  <button type="button" class="btn-sm" disabled={downloadingId === item.id} onclick={() => downloadAttachment(item)}>
+                    {downloadingId === item.id ? 'Downloading…' : 'Download'}
+                  </button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
         <!-- Hardware section (Belarc audit) -->
         <div class="rp-section">
           <div class="section-head hw-head">
@@ -593,7 +873,9 @@
           {#if hwBaseline}
             <div class="hw-baseline-meta">
               Baseline accepted {fmtDate(hwBaseline.createdAt)}{hwBaseline.submittedBy ? ` · uploaded by ${hwBaseline.submittedBy.name}` : ''}
-              <button class="hw-link" onclick={() => hwViewRaw(hwBaseline!.id)}>View original Belarc report</button>
+              {#if hwBaseline.fileName !== 'Manual entry'}
+                <button class="hw-link" onclick={() => hwViewRaw(hwBaseline!.id)}>View original Belarc report</button>
+              {/if}
               {#if hwExitCheck}
                 <span class="badge {hwExitCheck.cls}" title="Audit-enrolled assets can only be returned after their latest scan is reviewed">{hwExitCheck.label}</span>
               {/if}
@@ -636,7 +918,9 @@
                         {hwAccepting === scan.id ? 'Accepting…' : hwBaseline ? 'Make baseline' : 'Accept as baseline'}
                       </button>
                     {/if}
-                    <button class="hw-link" onclick={() => hwViewRaw(scan.id)}>View report</button>
+                    {#if scan.fileName !== 'Manual entry'}
+                      <button class="hw-link" onclick={() => hwViewRaw(scan.id)}>View report</button>
+                    {/if}
                     <button class="hw-link" onclick={() => goto(`/hardware-audit/${scan.id}`)}>Details</button>
                   </div>
                 </div>
@@ -803,6 +1087,77 @@
           <button class="btn-ghost" onclick={() => showRecoverModal = false}>Cancel</button>
           <button class="btn-primary" onclick={() => confirmRecover(false)} disabled={recoverBusy}>
             {recoverBusy ? 'Saving…' : 'Confirm recovery'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ── Assign camera to channel modal ──────────────────────────────────── -->
+  {#if showAssignModal}
+    <div class="modal-overlay" onclick={() => showAssignModal = false} role="presentation">
+      <div class="modal modal-sm" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Assign to NVR channel">
+        <div class="modal-head">
+          <span class="modal-title">Assign to NVR channel</span>
+          <button class="modal-close" onclick={() => showAssignModal = false} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label class="form-label" for="assign-channel">Available channel</label>
+            <select id="assign-channel" class="form-select" bind:value={assignChannelId}>
+              <option value="">— Select channel —</option>
+              {#each availableChannels as ch}<option value={ch.id}>{ch.label}</option>{/each}
+            </select>
+            {#if availableChannels.length === 0}<p class="field-hint">No unassigned channels in this branch's recorders.</p>{/if}
+          </div>
+          {#if assignErr}<div class="form-err">{assignErr}</div>{/if}
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" onclick={() => showAssignModal = false}>Cancel</button>
+          <button class="btn-primary" onclick={confirmAssign} disabled={assignBusy || !assignChannelId}>
+            {assignBusy ? 'Saving…' : 'Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ── Add server role modal ───────────────────────────────────────────── -->
+  {#if showRoleModal}
+    <div class="modal-overlay" onclick={() => showRoleModal = false} role="presentation">
+      <div class="modal modal-sm" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add server role">
+        <div class="modal-head">
+          <span class="modal-title">Add server role</span>
+          <button class="modal-close" onclick={() => showRoleModal = false} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label class="form-label" for="role-type">Role type</label>
+            <select id="role-type" class="form-select" bind:value={roleType}>
+              <option value="domain_controller">Domain Controller</option>
+              <option value="file_server">File Server</option>
+              <option value="application_server">Application Server</option>
+              <option value="database_server">Database Server</option>
+              <option value="backup_server">Backup Server</option>
+              <option value="dns_server">DNS Server</option>
+              <option value="dhcp_server">DHCP Server</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <label class="checkbox-row" style="margin-top: 8px;">
+            <input type="checkbox" bind:checked={roleIsPrimary} />
+            <span>Primary role</span>
+          </label>
+          {#if roleErr}<div class="form-err">{roleErr}</div>{/if}
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" onclick={() => showRoleModal = false}>Cancel</button>
+          <button class="btn-primary" onclick={confirmAddRole} disabled={roleBusy}>
+            {roleBusy ? 'Saving…' : 'Add role'}
           </button>
         </div>
       </div>
@@ -1168,6 +1523,21 @@
   .component-item { display: grid; grid-template-columns: 80px 1.5fr 1fr 80px; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--hairline); border-radius: 7px; font-size: 12px; }
   .component-item span { color: var(--body); }
   @media (max-width: 760px) { .component-item { grid-template-columns: 1fr 1fr; } }
+
+  .btn-sm {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 7px;
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--hairline);
+    background: var(--canvas); color: var(--ink);
+  }
+  .btn-sm:hover { background: var(--canvas-soft-2); }
+
+  .link-add-more { display: inline-block; margin-top: 10px; font-size: 12px; color: var(--link); text-decoration: underline; }
+
+  .field-hint { font-size: 11.5px; color: var(--mute); margin: 4px 0 0; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
 
   .field-label {
     font-size: 10.5px;

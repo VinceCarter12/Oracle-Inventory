@@ -25,6 +25,10 @@
     employee: { id: string; name: string; employeeId: string; department: { name: string } | null; branch: { name: string } | null; };
   }
 
+  interface ApiCategory { id: string; name: string; }
+
+  interface Page<T> { items: T[]; total: number; page: number; limit: number; }
+
   // ── UI types ──────────────────────────────────────────────────────────────────
   interface Employee { id: string; empId: string; name: string; initials: string; color: string; role: string; dept: string; }
   interface Asset    { id: string; name: string; serial: string; category: string; available: boolean; }
@@ -47,33 +51,38 @@
   }
 
   // ── State ─────────────────────────────────────────────────────────────────────
+  const ASSET_PAGE_SIZE = 20;
+
   let loading    = $state(true);
   let loadErr    = $state('');
   let submitting = $state(false);
   let submitErr  = $state('');
 
-  let employees = $state<Employee[]>([]);
-  let assets    = $state<Asset[]>([]);
+  let categories   = $state<string[]>(['All']);
 
-  let empSearch      = $state('');
+  let employees    = $state<Employee[]>([]);
+  let empLoading   = $state(false);
+  let empSearch    = $state('');
+  let empEditing   = $state(false);
+  let selectedEmp  = $state<Employee | null>(null);
+
+  let assets        = $state<Asset[]>([]);
+  let assetTotal     = $state(0);
+  let assetPage      = $state(1);
+  let assetLoading   = $state(false);
   let assetSearch    = $state('');
   let assetCat       = $state('All');
-  let selectedEmp    = $state<Employee | null>(null);
-  let selectedAssets = $state(new Set<string>());
+  let selectedAssetsMap = $state(new Map<string, Asset>());
+
   let notes          = $state('');
   let assignedDate   = $state('');
   let expectedReturn = $state('');
 
-  // ── Load ──────────────────────────────────────────────────────────────────────
+  // ── Load: categories (small, fixed list — fetched once) ──────────────────────
   onMount(async () => {
-    loadErr = '';
     try {
-      const [rawEmps, rawAssets] = await Promise.all([
-        api.get<ApiEmployee[]>('/api/employees'),
-        api.get<ApiAsset[]>('/api/assets'),
-      ]);
-      employees = rawEmps.filter(e => e.isActive).map(mapEmployee);
-      assets    = rawAssets.map(mapAsset);
+      const cats = await api.get<ApiCategory[]>('/api/categories');
+      categories = ['All', ...cats.map(c => c.name)];
     } catch (e) {
       loadErr = (e as Error).message;
     } finally {
@@ -81,42 +90,81 @@
     }
   });
 
+  // ── Load: employees — server-side search, top matches only ──────────────────
+  async function loadEmployees(term: string) {
+    empLoading = true;
+    try {
+      const qs = new URLSearchParams({ isActive: 'true', limit: '8' });
+      if (term.trim()) qs.set('q', term.trim());
+      const resp = await api.get<Page<ApiEmployee>>(`/api/employees?${qs}`);
+      employees = resp.items.map(mapEmployee);
+    } catch (e) {
+      loadErr = (e as Error).message;
+    } finally {
+      empLoading = false;
+    }
+  }
+
+  let empDebounce: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    const term = empSearch;
+    if (selectedEmp && !empEditing) return;
+    clearTimeout(empDebounce);
+    empDebounce = setTimeout(() => loadEmployees(term), 250);
+    return () => clearTimeout(empDebounce);
+  });
+
+  // ── Load: assets — server-side search + filter + pagination ─────────────────
+  async function loadAssets(term: string, cat: string, page: number) {
+    assetLoading = true;
+    try {
+      const qs = new URLSearchParams({ available: 'true', page: String(page), limit: String(ASSET_PAGE_SIZE) });
+      if (term.trim()) qs.set('q', term.trim());
+      if (cat !== 'All') qs.set('category', cat);
+      const resp = await api.get<Page<ApiAsset>>(`/api/assets?${qs}`);
+      assets     = resp.items.map(mapAsset);
+      assetTotal = resp.total;
+    } catch (e) {
+      loadErr = (e as Error).message;
+    } finally {
+      assetLoading = false;
+    }
+  }
+
+  // Reset to page 1 whenever the search term or category changes.
+  $effect(() => { assetSearch; assetCat; assetPage = 1; });
+
+  let assetDebounce: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    const term = assetSearch, cat = assetCat, page = assetPage;
+    clearTimeout(assetDebounce);
+    assetDebounce = setTimeout(() => loadAssets(term, cat, page), 250);
+    return () => clearTimeout(assetDebounce);
+  });
+
   // ── Derived ───────────────────────────────────────────────────────────────────
-  const categories = $derived(['All', ...new Set(assets.map(a => a.category).sort())]);
+  const selectedAssetObjects = $derived([...selectedAssetsMap.values()]);
 
-  const filteredEmps = $derived(
-    employees.filter(e => {
-      const q = empSearch.toLowerCase();
-      return !q || e.name.toLowerCase().includes(q) || e.empId.toLowerCase().includes(q) || e.role.toLowerCase().includes(q);
-    })
-  );
-
-  const filteredAssets = $derived(
-    assets.filter(a => {
-      const q = assetSearch.toLowerCase();
-      const matchQ = !q || a.name.toLowerCase().includes(q) || a.serial.toLowerCase().includes(q);
-      const matchC = assetCat === 'All' || a.category === assetCat;
-      return matchQ && matchC;
-    })
-  );
-
-  const selectedAssetObjects = $derived(assets.filter(a => selectedAssets.has(a.id)));
+  const assetPageStart = $derived(assetTotal === 0 ? 0 : (assetPage - 1) * ASSET_PAGE_SIZE + 1);
+  const assetPageEnd   = $derived(Math.min(assetPage * ASSET_PAGE_SIZE, assetTotal));
+  const hasPrevPage    = $derived(assetPage > 1);
+  const hasNextPage    = $derived(assetPage * ASSET_PAGE_SIZE < assetTotal);
 
   const step1Done  = $derived(selectedEmp !== null);
-  const step2Done  = $derived(selectedAssets.size > 0);
+  const step2Done  = $derived(selectedAssetsMap.size > 0);
   const canConfirm = $derived(step1Done && step2Done && !submitting);
   const currentStep = $derived(!step1Done ? 1 : !step2Done ? 2 : 3);
 
-  function toggleAsset(id: string) {
-    const next = new Set(selectedAssets);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    selectedAssets = next;
+  function toggleAsset(asset: Asset) {
+    const next = new Map(selectedAssetsMap);
+    if (next.has(asset.id)) next.delete(asset.id); else next.set(asset.id, asset);
+    selectedAssetsMap = next;
   }
 
   function removeAsset(id: string) {
-    const next = new Set(selectedAssets);
+    const next = new Map(selectedAssetsMap);
     next.delete(id);
-    selectedAssets = next;
+    selectedAssetsMap = next;
   }
 
   async function confirmAssignment() {
@@ -125,7 +173,7 @@
     submitting = true;
     try {
       const results = await Promise.all(
-        [...selectedAssets].map(assetId =>
+        [...selectedAssetsMap.keys()].map(assetId =>
           api.post<ApiAssignment>('/api/assignments', {
             assetId,
             employeeId: selectedEmp!.id,
@@ -208,74 +256,98 @@
           <span class="card-title">Employee</span>
           <span class="count-badge">{selectedEmp ? '1 selected' : '0 selected'}</span>
         </div>
-        <div class="search-wrap">
-          <svg class="s-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <input class="search-input" type="search" placeholder="Search employee name or ID…" bind:value={empSearch} />
-        </div>
-        <div class="list-scroll">
-          {#if loading}
-            <div class="list-empty">Loading…</div>
-          {:else}
-          {#each filteredEmps as emp}
-            <button
-              class="emp-row"
-              class:selected={selectedEmp?.id === emp.id}
-              onclick={() => selectedEmp = selectedEmp?.id === emp.id ? null : emp}
-            >
-              <span class="emp-av" style="background:{emp.color}">{emp.initials}</span>
-              <div class="emp-info">
-                <div class="emp-name">{emp.name}</div>
-                <div class="emp-sub">{emp.empId} · {emp.role}</div>
-              </div>
-              {#if emp.dept !== '—'}<span class="dept-tag">{emp.dept}</span>{/if}
-              {#if selectedEmp?.id === emp.id}
-                <span class="sel-check" aria-label="Selected">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </span>
-              {/if}
-            </button>
-          {/each}
-          {#if filteredEmps.length === 0}
-            <div class="list-empty">No employees match your search.</div>
-          {/if}
-          {/if}
-        </div>
+        {#if !selectedEmp || empEditing}
+          <div class="search-wrap">
+            <svg class="s-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input class="search-input" type="search" placeholder="Search employee name or ID…" bind:value={empSearch} />
+          </div>
+          <div class="list-scroll">
+            {#if empLoading}
+              <div class="list-empty">Loading…</div>
+            {:else}
+            {#each employees as emp}
+              <button
+                class="emp-row"
+                class:selected={selectedEmp?.id === emp.id}
+                onclick={() => { selectedEmp = emp; empEditing = false; }}
+              >
+                <span class="emp-av" style="background:{emp.color}">{emp.initials}</span>
+                <div class="emp-info">
+                  <div class="emp-name">{emp.name}</div>
+                  <div class="emp-sub">{emp.empId} · {emp.role}</div>
+                </div>
+                {#if emp.dept !== '—'}<span class="dept-tag">{emp.dept}</span>{/if}
+                {#if selectedEmp?.id === emp.id}
+                  <span class="sel-check" aria-label="Selected">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                {/if}
+              </button>
+            {/each}
+            {#if employees.length === 0}
+              <div class="list-empty">No employees match your search.</div>
+            {/if}
+            {/if}
+          </div>
+        {:else}
+          <div class="selected-emp-bar">
+            <span class="emp-av" style="background:{selectedEmp.color}">{selectedEmp.initials}</span>
+            <div class="emp-info">
+              <div class="emp-name">{selectedEmp.name}</div>
+              <div class="emp-sub">{selectedEmp.dept} · {selectedEmp.role}</div>
+            </div>
+            <button class="change-link" onclick={() => { empEditing = true; empSearch = ''; }}>Change</button>
+          </div>
+        {/if}
       </div>
 
       <!-- Available assets card -->
       <div class="card">
         <div class="card-head">
           <span class="card-title">Available assets</span>
-          <span class="count-badge">{selectedAssets.size} selected</span>
+          <span class="count-badge">{selectedAssetsMap.size} selected</span>
         </div>
-        <div class="search-wrap">
+        {#if selectedAssetObjects.length > 0}
+          <div class="chips-row">
+            {#each selectedAssetObjects as a}
+              <span class="chip-selected">
+                {a.name}
+                <button onclick={() => removeAsset(a.id)} aria-label="Remove {a.name}">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        <div class="search-wrap asset-search-wrap">
           <svg class="s-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/>
             <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
           <input class="search-input" type="search" placeholder="Search asset name, serial no., or category…" bind:value={assetSearch} />
-        </div>
-        <div class="filter-chips">
-          {#each categories as cat}
-            <button
-              class="chip"
-              class:chip-active={assetCat === cat}
-              onclick={() => assetCat = cat}
-            >{cat}</button>
-          {/each}
+          <select class="cat-select" bind:value={assetCat}>
+            {#each categories as cat}
+              <option value={cat}>{cat}</option>
+            {/each}
+          </select>
         </div>
         <div class="list-scroll">
-          {#each filteredAssets as asset}
+          {#if assetLoading}
+            <div class="list-empty">Loading…</div>
+          {:else}
+          {#each assets as asset}
             <button
               class="asset-row"
-              class:selected={selectedAssets.has(asset.id)}
+              class:selected={selectedAssetsMap.has(asset.id)}
               class:unavailable={!asset.available}
-              onclick={() => asset.available && toggleAsset(asset.id)}
+              onclick={() => asset.available && toggleAsset(asset)}
               disabled={!asset.available}
             >
               <span class="asset-icon">
@@ -307,7 +379,7 @@
               <span class="avail-badge" class:avail={asset.available} class:inuse={!asset.available}>
                 {asset.available ? 'Available' : 'In use'}
               </span>
-              {#if selectedAssets.has(asset.id)}
+              {#if selectedAssetsMap.has(asset.id)}
                 <span class="sel-check" aria-label="Selected">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -316,10 +388,28 @@
               {/if}
             </button>
           {/each}
-          {#if filteredAssets.length === 0}
+          {#if assets.length === 0}
             <div class="list-empty">No assets match your search.</div>
           {/if}
+          {/if}
         </div>
+        {#if assetTotal > ASSET_PAGE_SIZE}
+          <div class="page-bar">
+            <span class="page-info">Showing {assetPageStart}-{assetPageEnd} of {assetTotal}</span>
+            <div class="page-btns">
+              <button onclick={() => assetPage--} disabled={!hasPrevPage} aria-label="Previous page">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button onclick={() => assetPage++} disabled={!hasNextPage} aria-label="Next page">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        {/if}
       </div>
 
     </div>
@@ -348,7 +438,7 @@
 
       <!-- Assets to assign -->
       <div class="sum-section">
-        <div class="sum-label">Assets to assign ({selectedAssets.size})</div>
+        <div class="sum-label">Assets to assign ({selectedAssetsMap.size})</div>
         {#if selectedAssetObjects.length > 0}
           {#each selectedAssetObjects as a}
             <div class="sum-asset-row">
@@ -616,28 +706,76 @@
   .search-input::placeholder { color: var(--mute); }
   .search-input:focus { outline: none; border-color: var(--link); background: var(--canvas); }
 
-  /* Category filter chips */
-  .filter-chips {
+  /* Selected employee bar (replaces list once chosen) */
+  .selected-emp-bar {
     display: flex;
-    gap: 6px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .change-link {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--link);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    padding: 4px 0;
+    flex-shrink: 0;
+  }
+  .change-link:hover { text-decoration: underline; }
+
+  /* Asset search row with inline category select */
+  .asset-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .asset-search-wrap .search-input { flex: 1; }
+  .cat-select {
+    flex-shrink: 0;
+    width: 130px;
+    padding: 7px 8px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-md);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    color: var(--ink);
+    background: var(--canvas-soft);
+  }
+  .cat-select:focus { outline: none; border-color: var(--link); }
+
+  /* Selected asset chips */
+  .chips-row {
+    display: flex;
     flex-wrap: wrap;
+    gap: 6px;
     padding: 10px 14px;
     border-bottom: 1px solid var(--hairline);
   }
-
-  .chip {
+  .chip-selected {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 12px;
-    padding: 3px 10px;
+    padding: 3px 4px 3px 10px;
     border-radius: 999px;
-    border: 1px solid var(--hairline);
-    background: var(--canvas);
-    color: var(--body);
-    cursor: pointer;
-    font-family: var(--font-sans);
-    transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+    background: oklch(93% 0.06 264);
+    color: var(--link);
   }
-  .chip:hover:not(.chip-active) { background: var(--canvas-soft-2); }
-  .chip-active { background: var(--link); color: #fff; border-color: var(--link); }
+  .chip-selected button {
+    display: flex;
+    align-items: center;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 999px;
+  }
+  .chip-selected button:hover { background: oklch(88% 0.08 264); }
 
   /* Scrollable list */
   .list-scroll {
@@ -763,6 +901,33 @@
     font-size: 12px;
     color: var(--mute);
   }
+
+  /* Pagination bar */
+  .page-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid var(--hairline);
+  }
+  .page-info { font-size: 11.5px; color: var(--mute); }
+  .page-btns { display: flex; gap: 6px; }
+  .page-btns button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-md);
+    background: var(--canvas);
+    color: var(--body);
+    cursor: pointer;
+    transition: background 100ms ease;
+  }
+  .page-btns button:hover:not(:disabled) { background: var(--canvas-soft-2); }
+  .page-btns button:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Summary sidebar */
   .summary-card {

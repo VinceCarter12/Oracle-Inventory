@@ -1,8 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
   import SearchInput from '$lib/components/SearchInput.svelte';
@@ -35,6 +36,7 @@
     finally { loading = false; }
   }
   onMount(load);
+  onDestroy(onChange(['Department', 'Branch'], () => load()));
   function resetPage() { currentPage = 1; }
   function startCreate() { name = ''; branchId = branches[0]?.id ?? ''; formError = ''; showCreate = true; }
   async function create() {

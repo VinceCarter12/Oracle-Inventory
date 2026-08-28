@@ -1,8 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   interface StockItem { id: string; sku: string; name: string; unitOfMeasure: string; balance: number; }
   interface StockLocation { id: string; name: string; branchId: string; }
@@ -35,7 +36,7 @@
   let transferForm = $state({ stockItemId: '', sourceLocationId: '', destinationLocationId: '', quantity: '', reason: '' });
   let announce = $state('');
 
-  onMount(async () => {
+  async function loadStock() {
     try {
       const [itemsRes, locationsRes] = await Promise.all([
         api.get<{ items: StockItem[] }>('/api/stock/items?pageSize=100'),
@@ -51,7 +52,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadStock(); });
+  onDestroy(onChange(['StockMovement'], () => loadStock()));
 
   async function loadHistory() {
     if (!selectedItemId) { entries = []; return; }

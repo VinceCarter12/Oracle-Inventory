@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   interface StockLocation { id: string; name: string; branchId: string; locationType: string; }
   interface StockPolicy { id: string; stockItemId: string; locationId: string; minimumQuantity: number; reorderQuantity: number; updatedAt: string; location: StockLocation; }
@@ -42,6 +43,7 @@
   let policyError = $state('');
 
   onMount(load);
+  onDestroy(onChange(['StockMovement'], () => load()));
 
   async function load() {
     loading = true; error = '';
