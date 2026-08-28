@@ -3,9 +3,10 @@
 </svelte:head>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
   import { toCsv, downloadCsv } from '$lib/utils/csv';
   import StatCard    from '$lib/components/StatCard.svelte';
   import SectionCard from '$lib/components/SectionCard.svelte';
@@ -64,12 +65,19 @@
     createdAt: string;
     user:      { id: string; name: string; email: string } | null;
   }
+  interface InfraSummary {
+    hardwareAudit: { pendingMismatches: number };
+    cctv:          { enabled: false } | { enabled: true; cameras: number; recorders: number };
+    network:       { enabled: false } | { enabled: true; accessPoints: number; switches: number };
+    infrastructure: { enabled: false } | { enabled: true; servers: number; firewalls: number | null; ispCircuits: number };
+  }
 
   // ── State ──────────────────────────────────────────────────────────────────
   let summary       = $state<Summary | null>(null);
   let activities    = $state<ActivityLog[]>([]);
   let trend         = $state<TrendMonth[]>([]);
   let frequentAssets = $state<FrequentAsset[]>([]);
+  let infra         = $state<InfraSummary | null>(null);
   let loading       = $state(true);
   let search        = $state('');
   let dateFrom      = $state('');
@@ -186,21 +194,32 @@
   }
 
   // ── Data fetch ─────────────────────────────────────────────────────────────
-  onMount(async () => {
+  async function loadDashboard() {
     // Fetch independently — a 403 on one endpoint must not blank the others
-    const [, act, trd, freq] = await Promise.all([
+    const [, act, trd, freq, inf] = await Promise.all([
       loadSummary(),
       can('access_logs')
         ? api.get<{ logs: ActivityLog[] }>('/api/activity?limit=15').catch(() => null)
         : Promise.resolve(null),
       api.get<{ months: TrendMonth[] }>('/api/reports/condition-trend').catch(() => null),
       api.get<{ assets: FrequentAsset[] }>('/api/reports/movement-frequency?limit=10').catch(() => null),
+      can('view_reports')
+        ? api.get<InfraSummary>('/api/reports/infrastructure-summary').catch(() => null)
+        : Promise.resolve(null),
     ]);
     if (act)  activities     = act.logs;
     if (trd)  trend          = trd.months;
     if (freq) frequentAssets = freq.assets;
+    if (inf)  infra          = inf;
     loading = false;
-  });
+  }
+
+  onMount(() => { void loadDashboard(); });
+  onDestroy(onChange(['Asset', 'Assignment', 'Employee'], () => loadDashboard()));
+
+  const hasInfraSection = $derived(
+    infra !== null && (infra.cctv.enabled || infra.network.enabled || infra.infrastructure.enabled)
+  );
 </script>
 
 <div class="page">
@@ -255,8 +274,8 @@
     />
   </div>
 
-  <!-- ── Stat cards — row 2 (2 col) ──────────────────────────────────────── -->
-  <div class="stat-row stat-row--2">
+  <!-- ── Stat cards — row 2 (3 col) ──────────────────────────────────────── -->
+  <div class="stat-row stat-row--3">
     <StatCard
       label="Under Repair"
       helper="Currently being serviced"
@@ -268,6 +287,13 @@
       helper="Flagged for retirement"
       value={kpi.forDisposal.toLocaleString()}
       {loading}
+    />
+    <StatCard
+      label="Pending Hardware Audit"
+      helper="Mismatches awaiting review"
+      value={(infra?.hardwareAudit.pendingMismatches ?? 0).toLocaleString()}
+      loading={loading && !infra}
+      href={can('view_inventory') ? '/hardware-audit' : undefined}
     />
   </div>
 
@@ -385,6 +411,50 @@
       {/if}
     </SectionCard>
   </div>
+
+  <!-- ── Infrastructure summary (CCTV, network, servers/firewall/ISP) ─────── -->
+  {#if hasInfraSection}
+    <SectionCard title="Infrastructure" subtitle="CCTV, network & server inventory">
+      <div class="util-metrics infra-metrics">
+        {#if infra?.cctv.enabled}
+          <a class="metric metric-link" href="/cctv">
+            <span class="metric-value">{infra.cctv.cameras.toLocaleString()}</span>
+            <span class="metric-label">Cameras</span>
+          </a>
+          <a class="metric metric-link" href="/cctv">
+            <span class="metric-value">{infra.cctv.recorders.toLocaleString()}</span>
+            <span class="metric-label">NVRs / DVRs</span>
+          </a>
+        {/if}
+        {#if infra?.network.enabled}
+          <a class="metric metric-link" href="/network">
+            <span class="metric-value">{infra.network.accessPoints.toLocaleString()}</span>
+            <span class="metric-label">Access points</span>
+          </a>
+          <a class="metric metric-link" href="/network">
+            <span class="metric-value">{infra.network.switches.toLocaleString()}</span>
+            <span class="metric-label">Switches</span>
+          </a>
+        {/if}
+        {#if infra?.infrastructure.enabled}
+          <div class="metric">
+            <span class="metric-value">{infra.infrastructure.servers.toLocaleString()}</span>
+            <span class="metric-label">Servers</span>
+          </div>
+          {#if infra.infrastructure.firewalls !== null}
+            <div class="metric">
+              <span class="metric-value">{infra.infrastructure.firewalls.toLocaleString()}</span>
+              <span class="metric-label">Firewalls</span>
+            </div>
+          {/if}
+          <div class="metric">
+            <span class="metric-value">{infra.infrastructure.ispCircuits.toLocaleString()}</span>
+            <span class="metric-label">ISP circuits</span>
+          </div>
+        {/if}
+      </div>
+    </SectionCard>
+  {/if}
 
   <!-- ── Condition trend + Movement frequency ─────────────────────────────── -->
   <div class="two-col">
@@ -733,6 +803,19 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .infra-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .metric-link {
+    text-decoration: none;
+    transition: background 100ms ease, border-color 100ms ease;
+  }
+  .metric-link:hover {
+    background: var(--canvas-soft);
+    border-color: var(--hairline-strong, var(--hairline));
   }
 
   .metric-value {

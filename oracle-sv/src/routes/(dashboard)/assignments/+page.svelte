@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { onChange } from '$lib/ws';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
@@ -86,7 +87,7 @@
   }
 
   // ── Load ──────────────────────────────────────────────────────────────────────
-  onMount(async () => {
+  async function loadAssignments() {
     loadErr = '';
     try {
       const [raw, s] = await Promise.all([
@@ -100,7 +101,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadAssignments(); });
+  onDestroy(onChange(['Assignment', 'Asset'], () => loadAssignments()));
 
   // ── Derived ───────────────────────────────────────────────────────────────────
   const filtered = $derived(

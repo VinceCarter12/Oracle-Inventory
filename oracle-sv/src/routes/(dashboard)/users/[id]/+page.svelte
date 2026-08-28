@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { authStore } from '$lib/stores/auth.svelte';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
-  onMount(async () => {
+  async function loadUser() {
     try {
       [user, roles, branches] = await Promise.all([
         api.get<SystemUser>(`/api/users/${userId}`),
@@ -76,7 +77,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadUser(); });
+  onDestroy(onChange(['User', 'Role', 'Branch'], () => loadUser()));
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 

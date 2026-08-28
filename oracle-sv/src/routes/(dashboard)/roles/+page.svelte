@@ -3,10 +3,11 @@
 </svelte:head>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { onChange } from '$lib/ws';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import Modal from '$lib/components/Modal.svelte';
 
@@ -112,6 +113,7 @@
   }
 
   onMount(load);
+  onDestroy(onChange(['Role'], () => load()));
 </script>
 
 <div class="page">

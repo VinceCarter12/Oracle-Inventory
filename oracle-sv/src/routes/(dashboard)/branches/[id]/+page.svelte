@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   interface Branch {
     id: string;
@@ -41,7 +42,7 @@
   let deleting    = $state(false);
   let deleteErr   = $state('');
 
-  onMount(async () => {
+  async function loadBranch() {
     try {
       branch = await api.get<Branch>(`/api/branches/${branchId}`);
     } catch (e) {
@@ -63,7 +64,10 @@
     } else {
       stockLoading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadBranch(); });
+  onDestroy(onChange(['Branch', 'StockMovement'], () => loadBranch()));
 
   function mapSrc(b: Branch) {
     if (!b.latitude || !b.longitude) return null;

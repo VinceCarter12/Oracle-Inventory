@@ -42,7 +42,7 @@ async function raw(path: string, init?: RequestInit): Promise<Response> {
 export const api = {
   get:    <T>(path: string)                  => request<T>(path),
   post:   <T>(path: string, body: unknown, headers?: HeadersInit)   => request<T>(path, { method: 'POST', headers, body: JSON.stringify(body) }),
-  put:    <T>(path: string, body: unknown)   => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
+  put:    <T>(path: string, body: unknown, headers?: HeadersInit)   => request<T>(path, { method: 'PUT', headers, body: JSON.stringify(body) }),
   patch:  <T>(path: string, body: unknown)   => request<T>(path, { method: 'PATCH',  body: JSON.stringify(body) }),
   delete: <T>(path: string)                  => request<T>(path, { method: 'DELETE' }),
   raw,

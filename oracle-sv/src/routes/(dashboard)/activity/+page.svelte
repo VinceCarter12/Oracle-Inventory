@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
+  import { onChange } from '$lib/ws';
   import DatePicker from '$lib/components/date/DatePicker.svelte';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
@@ -31,9 +32,14 @@
   let total     = $state(0);
   let loading   = $state(true);
   let loadErr   = $state('');
-  let entities  = $state<string[]>([]);
+  interface Category { key: string; label: string; }
+  interface ActorOption { id: string; name: string; email: string; }
 
-  let filterEntity = $state('');
+  let categories = $state<Category[]>([]);
+  let actors     = $state<ActorOption[]>([]);
+
+  let filterCategory = $state('');
+  let filterUserId    = $state('');
   let filterAction = $state('');
   let filterFrom   = $state('');
   let filterTo     = $state('');
@@ -50,7 +56,8 @@
     loadErr = '';
     try {
       const params = new URLSearchParams();
-      if (filterEntity) params.set('entity', filterEntity);
+      if (filterCategory) params.set('category', filterCategory);
+      if (filterUserId)   params.set('userId', filterUserId);
       if (filterAction) params.set('action', filterAction);
       if (filterFrom)   params.set('from', filterFrom);
       if (filterTo)     params.set('to', filterTo);
@@ -69,14 +76,19 @@
 
   onMount(async () => {
     try {
-      entities = await api.get<string[]>('/api/activity/entities');
+      [categories, actors] = await Promise.all([
+        api.get<Category[]>('/api/activity/categories'),
+        api.get<ActorOption[]>('/api/activity/users'),
+      ]);
     } catch { /* non-critical */ }
     await loadLogs();
   });
 
+  onDestroy(onChange('*', () => loadLogs()));
+
   function applyFilters() { currentPage = 1; loadLogs(); }
   function clearFilters() {
-    filterEntity = ''; filterAction = ''; filterFrom = ''; filterTo = '';
+    filterCategory = ''; filterUserId = ''; filterAction = ''; filterFrom = ''; filterTo = '';
     currentPage = 1;
     loadLogs();
   }
@@ -113,13 +125,15 @@
     ROLE_UPDATED:         'warning',
     ROLE_DELETED:         'error',
     ROLE_PERMISSIONS_SET: 'info',
-    SITE_CREATED:         'info',
-    SITE_UPDATED:         'warning',
-    SITE_ARCHIVED:        'error',
-    SITE_UNARCHIVED:      'info',
+    BRANCH_CREATED:       'info',
+    BRANCH_UPDATED:       'warning',
+    BRANCH_ARCHIVED:      'error',
+    BRANCH_UNARCHIVED:    'info',
+    BRANCH_DELETED:       'error',
     CATEGORY_CREATED:     'info',
     CATEGORY_UPDATED:     'warning',
     CATEGORY_DELETED:     'error',
+    USER_LOGGED_IN:       'info',
   };
 
   function logLevel(action: string): 'info' | 'warning' | 'error' {
@@ -144,6 +158,7 @@
     const m = log.metadata ?? {};
     const actor = log.user ? log.user.name : 'System';
 
+    if (log.action === 'USER_LOGGED_IN') return `${actor} logged in`;
     if (m.assetName && m.employeeName) return `${actor} assigned ${m.assetName} to ${m.employeeName}`;
     if (m.name)          return `${actor} ${action}: ${m.name} (${entity})`;
     if (m.collectedCount !== undefined) return `${actor} collected ${m.collectedCount} asset(s) during turnover`;
@@ -168,10 +183,17 @@
   <div class="filter-card">
     <span class="filter-card-label">Filters:</span>
     <div class="filter-bar">
-      <select class="filter-select" bind:value={filterEntity} onchange={applyFilters}>
-        <option value="">All entities</option>
-        {#each entities as e}
-          <option value={e}>{e}</option>
+      <select class="filter-select" bind:value={filterCategory} onchange={applyFilters}>
+        <option value="">All categories</option>
+        {#each categories as c}
+          <option value={c.key}>{c.label}</option>
+        {/each}
+      </select>
+
+      <select class="filter-select" bind:value={filterUserId} onchange={applyFilters}>
+        <option value="">All users</option>
+        {#each actors as a}
+          <option value={a.id}>{a.name}</option>
         {/each}
       </select>
 
@@ -220,6 +242,7 @@
             <tr>
               <th class="th-level">Log Level</th>
               <th class="th-status">Status</th>
+              <th class="th-user">User</th>
               <th class="th-ts">Timestamp</th>
               <th class="th-msg">Log Message</th>
             </tr>
@@ -242,6 +265,7 @@
                 <td class="td-status">
                   <span class="badge {status.cls}">{status.label}</span>
                 </td>
+                <td class="td-user">{log.user ? log.user.name : 'System'}</td>
                 <td class="td-ts">{formatTimestamp(log.createdAt)}</td>
                 <td class="td-msg">{buildMessage(log)}</td>
               </tr>
@@ -368,8 +392,10 @@
 
   .th-level  { width: 110px; }
   .th-status { width: 96px; }
+  .th-user   { width: 140px; }
   .th-ts     { width: 168px; }
   .th-msg    { /* flex */ }
+  .td-user   { white-space: nowrap; }
 
   .log-row td {
     padding: 9px 18px;

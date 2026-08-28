@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
   import { avatarColor, initials } from '$lib/utils/avatarColor';
   import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
@@ -49,8 +50,9 @@
   let showCreate = $state(false);
   let creating   = $state(false);
   let createErr  = $state('');
+  const DEFAULT_PASSWORD = 'Opc1985!';
   let form = $state({
-    name: '', email: '', position: '', phone: '', roleId: '', branchId: '',
+    name: '', email: '', password: DEFAULT_PASSWORD, position: '', phone: '', roleId: '', branchId: '',
   });
 
   // ── Pagination ────────────────────────────────────────────────────────────────
@@ -84,7 +86,7 @@
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
-  onMount(async () => {
+  async function loadUsers() {
     try {
       [users, roles, branches] = await Promise.all([
         api.get<SystemUser[]>('/api/users'),
@@ -96,7 +98,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadUsers(); });
+  onDestroy(onChange(['User', 'Role', 'Branch'], () => loadUsers()));
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,11 +124,16 @@
       createErr = 'Name and email are required.';
       return;
     }
+    if (form.password.length < 8) {
+      createErr = 'Password must be at least 8 characters.';
+      return;
+    }
     creating = true;
     try {
       const created = await api.post<SystemUser>('/api/users', {
         name:     form.name.trim(),
         email:    form.email.trim(),
+        password: form.password,
         position: form.position.trim() || null,
         phone:    form.phone.trim()    || null,
         roleId:   form.roleId   || null,
@@ -131,7 +141,7 @@
       });
       users = [created, ...users];
       showCreate = false;
-      form = { name: '', email: '', position: '', phone: '', roleId: '', branchId: '' };
+      form = { name: '', email: '', password: DEFAULT_PASSWORD, position: '', phone: '', roleId: '', branchId: '' };
     } catch (e) {
       createErr = (e as Error).message;
     } finally {
@@ -142,7 +152,7 @@
 
 <!-- ── Create user modal ─────────────────────────────────────────────────────── -->
 <Modal bind:open={showCreate} title="Add User" onclose={() => (createErr = '')}>
-  <form onsubmit={submitCreate} style="display:contents">
+  <form id="add-user-form" onsubmit={submitCreate} style="display:contents">
     {#if createErr}
       <div class="form-error">{createErr}</div>
     {/if}
@@ -169,7 +179,11 @@
       </div>
     </div>
 
-    <p class="temp-pw-note">A temporary password will be emailed to the user upon creation.</p>
+    <div class="field">
+      <label class="field-label">Password *</label>
+      <input class="field-input" bind:value={form.password} type="text" placeholder="Password" required minlength="8" />
+      <p class="field-hint">Share this with the user directly. Super admins can change it later from this page.</p>
+    </div>
 
     <div class="field-row">
       <div class="field">
@@ -191,14 +205,14 @@
         </select>
       </div>
     </div>
-
-    {#snippet footer()}
-      <button type="button" class="btn-ghost" onclick={() => { showCreate = false; createErr = ''; }}>Cancel</button>
-      <button type="submit" class="btn-primary" disabled={creating}>
-        {creating ? 'Creating…' : 'Create user'}
-      </button>
-    {/snippet}
   </form>
+
+  {#snippet footer()}
+    <button type="button" class="btn-ghost" onclick={() => { showCreate = false; createErr = ''; }}>Cancel</button>
+    <button type="submit" form="add-user-form" class="btn-primary" disabled={creating}>
+      {creating ? 'Creating…' : 'Create user'}
+    </button>
+  {/snippet}
 </Modal>
 
 <!-- ── Page ──────────────────────────────────────────────────────────────────── -->
@@ -550,14 +564,11 @@
     color: var(--error);
     font-family: var(--font-sans);
   }
-  .temp-pw-note {
-    margin: 0;
+  .field-hint {
+    margin: 4px 0 0;
     font-size: 12px;
     color: var(--mute);
     font-family: var(--font-sans);
-    padding: 8px 10px;
-    background: var(--canvas-soft);
-    border-radius: var(--r-md);
   }
 
   /* ── Responsive ──────────────────────────────────────────────────────────── */

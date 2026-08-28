@@ -181,6 +181,70 @@ router.get("/summary", requirePermission("view_reports"), async (req: AuthReques
   });
 });
 
+// GET /api/reports/infrastructure-summary
+// Dashboard rollup for CCTV/NVR, network, and servers/firewall/ISP inventory.
+// Each domain reports { enabled: false } when its feature rollout is off, instead
+// of erroring, so the dashboard can just hide that section. Scoped to the caller's
+// branch (Super Admin sees all branches). Firewall count is withheld unless the
+// caller holds view_sensitive_network_fields, matching that domain's own gate.
+router.get("/infrastructure-summary", requirePermission("view_reports"), async (req: AuthRequest, res: Response) => {
+  const account = await prisma.systemUser.findUnique({
+    where: { id: req.user!.id },
+    select: { branchId: true, role: { select: { name: true } } },
+  });
+  const isSuperAdmin = account?.role?.name?.trim().toLowerCase() === "super_admin";
+  const branchId = isSuperAdmin ? undefined : account?.branchId ?? undefined;
+  const branchWhere = branchId ? { branchId } : {};
+
+  async function featureOn(featureKey: string, envVar: string) {
+    if (process.env[envVar] !== "true") return false;
+    const feature = await prisma.featureRollout.findUnique({ where: { key: featureKey } }).catch(() => null);
+    if (!feature) return false;
+    const override = branchId
+      ? await prisma.featureRolloutBranch.findUnique({ where: { featureKey_branchId: { featureKey, branchId } } }).catch(() => null)
+      : null;
+    return Boolean(override?.enabled ?? (feature.enabledGlobally && feature.status === "enabled"));
+  }
+
+  const [cctvOn, networkOn, infraOn, pendingMismatches] = await Promise.all([
+    featureOn("cctv.nvr.v1", "CCTV_NVR_ENABLED"),
+    featureOn("network.v1", "NETWORK_INFRA_ENABLED"),
+    featureOn("servers.firewall.isp.v1", "SERVERS_FIREWALL_ISP_ENABLED"),
+    prisma.hardwareScan.count({ where: { isBaseline: false, overallStatus: "mismatch", status: "pending" } }),
+  ]);
+
+  const [cctv, network, infrastructure] = await Promise.all([
+    cctvOn
+      ? Promise.all([
+          prisma.cameraProfile.count({ where: { asset: branchWhere } }),
+          prisma.recorderProfile.count({ where: { asset: branchWhere } }),
+        ]).then(([cameras, recorders]) => ({ enabled: true, cameras, recorders }))
+      : Promise.resolve({ enabled: false as const }),
+    networkOn
+      ? Promise.all([
+          prisma.accessPointProfile.count({ where: { asset: branchWhere } }),
+          prisma.switchProfile.count({ where: { asset: branchWhere } }),
+        ]).then(([accessPoints, switches]) => ({ enabled: true, accessPoints, switches }))
+      : Promise.resolve({ enabled: false as const }),
+    infraOn
+      ? Promise.all([
+          prisma.serverProfile.count({ where: { asset: branchWhere } }),
+          isSuperAdmin || req.permissions?.includes("view_sensitive_network_fields")
+            ? prisma.firewallProfile.count({ where: { asset: branchWhere } })
+            : Promise.resolve(null),
+          prisma.ispCircuit.count({ where: branchWhere }),
+        ]).then(([servers, firewalls, ispCircuits]) => ({ enabled: true, servers, firewalls, ispCircuits }))
+      : Promise.resolve({ enabled: false as const }),
+  ]);
+
+  res.json({
+    hardwareAudit: { pendingMismatches },
+    cctv,
+    network,
+    infrastructure,
+  });
+});
+
 // GET /api/reports/condition-trend
 // Monthly counts of condition-related movement events (repairs sent/returned, disposals)
 router.get("/condition-trend", requirePermission("view_reports"), async (_req: AuthRequest, res: Response) => {

@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { logActivity } from "../lib/activity";
 
 const router = Router();
 router.use(requireAuth);
@@ -22,6 +23,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     data: { name: name.trim() },
     include: { _count: { select: { assets: true } } },
   });
+  await logActivity({ userId: req.user!.id, action: "CATEGORY_CREATED", entity: "Category", entityId: category.id, metadata: { name: category.name } });
   res.status(201).json(category);
 });
 
@@ -36,6 +38,7 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     data: { name: name.trim() },
     include: { _count: { select: { assets: true } } },
   });
+  await logActivity({ userId: req.user!.id, action: "CATEGORY_UPDATED", entity: "Category", entityId: category.id, metadata: { name: category.name } });
   res.json(category);
 });
 
@@ -51,6 +54,7 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
     return;
   }
   await prisma.category.delete({ where: { id: req.params.id } });
+  await logActivity({ userId: req.user!.id, action: "CATEGORY_DELETED", entity: "Category", entityId: req.params.id, metadata: { name: cat.name } });
   res.json({ success: true });
 });
 

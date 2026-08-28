@@ -125,6 +125,16 @@ CREATE INDEX "StockLocation_branchId_archivedAt_idx" ON "StockLocation"("branchI
 CREATE INDEX "StockMovement_stockItemId_createdAt_idx" ON "StockMovement"("stockItemId", "createdAt");
 CREATE INDEX "StockLedgerEntry_locationId_createdAt_idx" ON "StockLedgerEntry"("locationId", "createdAt");
 
+-- Baseline roles are normally created by prisma/seed.ts, but this migration's
+-- RolePermission inserts below need the rows to exist even on a fresh
+-- database where seed has not run yet.
+INSERT INTO "Role" ("id", "name", "description") VALUES
+  ('role-super-admin', 'super_admin', 'Full system access'),
+  ('role-admin', 'admin', 'Inventory and staff management'),
+  ('role-staff', 'staff', 'Inventory operations'),
+  ('role-viewer', 'viewer', 'Read-only access')
+ON CONFLICT ("id") DO NOTHING;
+
 -- Phase 6 has distinct read and approval authority. Existing manage_stock remains the write authority.
 INSERT INTO "Permission" ("id", "key", "description") VALUES
   ('perm-view-stock', 'view_stock', 'View stock levels, movements, and counts'),
@@ -148,5 +158,13 @@ ALTER TABLE "StockLevelPolicy" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "StockCountSession" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "StockCountLine" ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE "StockItem", "StockLocation", "StockMovement", "StockLedgerEntry",
-  "StockLevelPolicy", "StockCountSession", "StockCountLine" FROM anon, authenticated;
+-- anon/authenticated only exist on Supabase-hosted Postgres; skip on a plain
+-- local/self-hosted database where there is no client-facing PostgREST role.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE "StockItem", "StockLocation", "StockMovement", "StockLedgerEntry",
+      "StockLevelPolicy", "StockCountSession", "StockCountLine" FROM anon, authenticated;
+  END IF;
+END $$;

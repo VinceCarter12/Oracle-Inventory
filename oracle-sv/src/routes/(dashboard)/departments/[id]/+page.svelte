@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
   import Modal from '$lib/components/Modal.svelte';
 
   type Branch = { id: string; name: string };
@@ -31,6 +32,7 @@
     finally { loading = false; }
   }
   onMount(load);
+  onDestroy(onChange(['Department', 'Employee'], () => load()));
 
   function openRename() { if (!department) return; renameName = department.name; renameErr = ''; showRename = true; }
   async function rename() {

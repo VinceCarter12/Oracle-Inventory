@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { logActivity } from "../lib/activity";
 import { validateCorporateEmail, normaliseEmail } from "../lib/email";
 import { createOtp, verifyOtp } from "../lib/otp";
 import { sendOtpEmail } from "../lib/mailer";
@@ -79,6 +80,14 @@ router.post("/login", loginLimiter, async (req: Request, res: Response) => {
     process.env.JWT_SECRET!,
     { expiresIn: "8h" }
   );
+
+  await logActivity({
+    userId:   user.id,
+    action:   "USER_LOGGED_IN",
+    entity:   "Session",
+    entityId: user.id,
+    metadata: { email: user.email },
+  });
 
   res.json({
     token,

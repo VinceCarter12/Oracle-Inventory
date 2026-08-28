@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
+  import { connectWs, disconnectWs } from '$lib/ws';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   const { children } = $props();
 
@@ -13,6 +14,13 @@
   $effect(() => {
     if (!authenticated) goto('/login');
     else if (mustChangePassword) goto('/first-login');
+  });
+
+  // One live-update connection for the whole session — pages subscribe to it
+  // via `onChange()` instead of opening their own connections.
+  $effect(() => {
+    if (authenticated && authStore.token) connectWs(authStore.token);
+    else disconnectWs();
   });
 
   // Periodically check if JWT has expired while user is idle on a page

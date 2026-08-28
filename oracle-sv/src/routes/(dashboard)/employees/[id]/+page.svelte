@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { can } from '$lib/utils/permissions';
+  import { onChange } from '$lib/ws';
 
   // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
-  onMount(async () => {
+  async function loadEmployee() {
     try {
       [employee, branches, departments] = await Promise.all([
         api.get<Employee>(`/api/employees/${empId}`),
@@ -77,7 +78,10 @@
     } finally {
       loading = false;
     }
-  });
+  }
+
+  onMount(() => { void loadEmployee(); });
+  onDestroy(onChange(['Employee', 'Branch', 'Department', 'Assignment'], () => loadEmployee()));
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 

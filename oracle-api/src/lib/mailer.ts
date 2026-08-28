@@ -23,21 +23,6 @@ export function generateOtp(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-/** Generate a secure temporary password: e.g. Tr7$kXmP2q */
-export function generateTempPassword(): string {
-  const upper  = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const lower  = "abcdefghjkmnpqrstuvwxyz";
-  const digits = "23456789";
-  const all    = upper + lower + digits;
-  const rand   = (set: string) => set[crypto.randomInt(set.length)];
-  const chars  = [rand(upper), rand(upper), rand(digits), rand(digits), ...Array.from({ length: 6 }, () => rand(all))];
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
-}
-
 // ── OTP emails ────────────────────────────────────────────────────────────────
 
 type OtpPurpose = "forgot_password" | "change_email" | "change_password";
@@ -59,20 +44,6 @@ export async function sendOtpEmail(to: string, code: string, purpose: OtpPurpose
     to,
     subject: OTP_SUBJECTS[purpose],
     html: otpHtml(code, OTP_LABELS[purpose]),
-  });
-}
-
-// ── Onboarding email ──────────────────────────────────────────────────────────
-
-export async function sendOnboardingEmail(opts: {
-  to: string;
-  name: string;
-  tempPassword: string;
-}): Promise<void> {
-  await send({
-    to: opts.to,
-    subject: "Welcome to Oracle Petroleum Inventory — Your Account is Ready",
-    html: onboardingHtml(opts.name, opts.to, opts.tempPassword),
   });
 }
 
@@ -180,31 +151,3 @@ function maintenanceHtml(opts: {
     </div>`;
 }
 
-function onboardingHtml(name: string, email: string, tempPassword: string): string {
-  return `
-    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:40px 32px;background:#fff;border-radius:12px;">
-      <h1 style="font-size:20px;font-weight:700;color:#171717;margin:0 0 8px;">Welcome to Oracle Petroleum Inventory</h1>
-      <p style="color:#4d4d4d;font-size:14px;margin:0 0 28px;">Hello ${name}, your account has been created by an administrator.</p>
-      <div style="background:#f5f5f5;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
-        <table style="width:100%;border-collapse:collapse;font-size:14px;">
-          <tr><td style="color:#888;padding:4px 0;width:40%;">Login URL</td>
-              <td style="color:#171717;font-weight:500;padding:4px 0;">${APP_URL}/login</td></tr>
-          <tr><td style="color:#888;padding:4px 0;">Email</td>
-              <td style="color:#171717;font-weight:500;padding:4px 0;">${email}</td></tr>
-          <tr><td style="color:#888;padding:4px 0;">Temp Password</td>
-              <td style="font-family:monospace;font-size:16px;font-weight:700;color:#171717;padding:4px 0;letter-spacing:2px;">${tempPassword}</td></tr>
-        </table>
-      </div>
-      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 18px;margin-bottom:24px;">
-        <p style="color:#9a3412;font-size:13px;margin:0;font-weight:500;">
-          You will be required to set a new password on your first login. Do not share your temporary password.
-        </p>
-      </div>
-      <a href="${APP_URL}/login" style="display:inline-block;padding:12px 24px;background:#171717;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">
-        Go to Login →
-      </a>
-      <p style="color:#aaa;font-size:12px;margin:28px 0 0;">
-        If you did not expect this email, contact your IT administrator immediately.
-      </p>
-    </div>`;
-}

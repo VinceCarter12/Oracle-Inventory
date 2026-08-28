@@ -9,7 +9,6 @@
 
   interface Category { id: string; name: string; }
   interface Branch   { id: string; name: string; }
-  interface EmployeeOption { id: string; name: string; employeeId?: string | null; }
 
   const CONDITIONS = [
     { value: 'usable',       label: 'Usable'       },
@@ -20,12 +19,11 @@
     { value: 'company',  label: 'Company'  },
     { value: 'personal', label: 'Personal' },
   ];
-  const isComputerCategoryName = (name: string | undefined) => !!name && /desktop|laptop|computer/i.test(name);
 
   let categories = $state<Category[]>([]);
   let branches   = $state<Branch[]>([]);
 
-  // ── Form state (shared by every asset, computer/laptop or otherwise) ─────────
+  // ── Form state ───────────────────────────────────────────────────────────────
   let assetName         = $state('');
   let serialNumber      = $state('');
   let condition         = $state('usable');
@@ -48,74 +46,143 @@
   let submitting = $state(false);
   let submitErr  = $state('');
 
-  // ── Computer / Laptop specifications — always part of the one Add Asset
-  //    form, not gated behind a category pick or a mode. Filling in any of
-  //    these fields is what decides, at submit time, whether this asset is
-  //    saved through the computer-intake path (which also creates a device
-  //    profile) or the plain asset path. ─────────────────────────────────────
-  const computerAllowed = $derived(can('create_inventory') && ['admin', 'super_admin'].includes((authStore.user?.role ?? '').trim().toLowerCase()));
+  // ── Computer / Laptop specs: shown inline whenever the selected category
+  //    is a computer/laptop category, instead of a separate mode or tab ──────────
+  const isComputerCategory = $derived(
+    /desktop|laptop|computer/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  let ciLoaded = $state(false);
 
-  type CiComponent = { type: 'ram' | 'storage'; slotOrBay?: string; brand?: string; model?: string; serialNumber?: string; capacity?: string; storageKind?: string };
-  let assetTag         = $state('');
-  let computerName     = $state('');
-  let brand             = $state('');
-  let model             = $state('');
-  let deviceType        = $state<'computer' | 'laptop'>('computer');
-  let processor         = $state('');
-  let motherboard       = $state('');
-  let operatingSystem   = $state('');
-  let osVersion         = $state('');
-  let osInstallDate     = $state('');
-  let employeeId        = $state('');
-  let components         = $state<CiComponent[]>([]);
-  let employees          = $state<EmployeeOption[]>([]);
+  // ── Access Point / Switch specs: same inline pattern, direct create (no
+  //    draft/preflight — these don't have duplicate-name concerns like
+  //    Computer intake does). ───────────────────────────────────────────────────
+  const isAccessPointCategory = $derived(
+    /access.?point|\bap\b|wifi|wi-fi/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  const isSwitchCategory = $derived(
+    /switch/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  let apPhysicalLocation = $state('');
+  let apNotes            = $state('');
+  let swSwitchType        = $state<'managed' | 'unmanaged'>('unmanaged');
+  let swPhysicalLocation  = $state('');
+  let swPortCount         = $state('');
+  let swNotes             = $state('');
 
-  const hasComputerSpecs = $derived(Boolean(
-    assetTag.trim() || computerName.trim() || brand.trim() || model.trim() ||
-    processor.trim() || motherboard.trim() || operatingSystem.trim() || osVersion.trim() ||
-    osInstallDate || employeeId || components.length > 0,
-  ));
+  // ── Phone specs: same inline pattern, direct create. Company vs BYOD reuses
+  //    the existing Ownership field — no separate phone-type control. ──────────
+  const isPhoneCategory = $derived(
+    /phone/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  let phoneImei        = $state('');
+  let phonePropertyTag = $state('');
+  let phoneBrand       = $state('');
+  let phoneModel       = $state('');
+  let phoneNotes       = $state('');
 
-  // Duplicate-name is a soft warning (backend still allows the save); an
-  // in-use asset tag is a hard block. Both surface inline — no separate
-  // review screen. A duplicate-name hit requires one extra "Save Anyway"
-  // click on the same button rather than a silent auto-continue.
-  let pendingDuplicateConfirm = $state(false);
-  let pendingDraftId          = $state('');
-  let pendingDraftVersion     = $state('');
-  let duplicateWarningText    = $state('');
+  // ── Camera / NVR specs: same inline pattern, direct create. Matches the
+  //    same category regex the backend uses in routes/cctv.ts. ─────────────────
+  const isCameraCategory = $derived(
+    /camera|cctv/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  const isRecorderCategory = $derived(
+    /nvr|dvr|recorder/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  let camPhysicalLocation = $state('');
+  let camCoverageArea     = $state('');
+  let camType             = $state<'fixed' | 'dome' | 'bullet' | 'ptz' | 'thermal' | 'other'>('fixed');
+  let camResolution       = $state('');
+  let camNightVision      = $state(false);
+  let camMotionDetection  = $state(false);
+  let camInstallationDate = $state('');
+  let camNotes            = $state('');
 
-  function resetPendingConfirm() {
-    pendingDuplicateConfirm = false; pendingDraftId = ''; pendingDraftVersion = ''; duplicateWarningText = '';
+  let recPhysicalLocation   = $state('');
+  let recChannelCapacity    = $state('');
+  let recRecorderType       = $state<'nvr' | 'dvr' | 'hybrid' | 'other'>('nvr');
+  let recStorageCapacityGb  = $state('');
+  let recRetentionDaysTarget = $state('');
+  let recNotes              = $state('');
+
+  // ── Server specs: inline once Category is Server. Domain Controller / File
+  //    Server aren't separate categories — they're a role on a Server asset,
+  //    picked via Role Type below (matches ServerRoleAssignment.roleType).
+  //    HIDDEN 2026-08-26 per user request (not enough time to support the
+  //    Servers & Circuits surface right now) — SERVER_SPECS_ENABLED forces
+  //    this off without deleting the implementation. Flip back to true to
+  //    re-enable; nothing else needs to change. ─────────────────────────────────
+  const SERVER_SPECS_ENABLED = false;
+  const isServerCategory = $derived(
+    SERVER_SPECS_ENABLED && /server/i.test(categories.find(c => c.id === categoryId)?.name ?? '')
+  );
+  let srvEnvironment       = $state<'production' | 'staging' | 'development' | 'test' | 'other'>('production');
+  let srvCriticality       = $state<'critical' | 'high' | 'medium' | 'low'>('medium');
+  let srvVirtualization    = $state<'physical' | 'hypervisor' | 'virtual_machine' | 'container_host' | 'other'>('physical');
+  let srvServiceOwner      = $state('');
+  let srvSupportOwner      = $state('');
+  let srvPurpose           = $state('');
+  let srvRoleType          = $state('');
+  let srvMotherboard       = $state('');
+  let srvProcessor         = $state('');
+
+  // ── Peripherals: generic child rows attached to whatever asset is created,
+  //    regardless of category — same pattern as the RAM/Storage rows already
+  //    built for Computer intake, reused via a generic backend endpoint. ────────
+  const PERIPHERAL_TYPES = [
+    { value: 'monitor', label: 'Monitor' }, { value: 'keyboard', label: 'Keyboard' },
+    { value: 'mouse', label: 'Mouse' }, { value: 'speaker', label: 'Speaker' },
+    { value: 'webcam', label: 'Webcam' }, { value: 'microphone', label: 'Microphone' },
+    { value: 'printer', label: 'Printer' }, { value: 'ups', label: 'UPS' },
+    { value: 'avr', label: 'AVR' }, { value: 'clicker', label: 'Clicker' },
+    { value: 'projector', label: 'Projector' }, { value: 'tv', label: 'TV' },
+    { value: 'signal_booster', label: 'Signal Booster' }, { value: 'flash_drive', label: 'Flash Drive' },
+    { value: 'external_hdd', label: 'External HDD' },
+    { value: 'hdd_ssd_docking_station', label: 'HDD/SSD Docking Station' },
+    { value: 'nvme_docking_station', label: 'NVME/SSD Docking Station' },
+  ];
+  type PeripheralRow = { type: string; brand: string; model: string; serialNumber: string; capacity: string; propertyTag: string };
+  let peripherals = $state<PeripheralRow[]>([]);
+  function addPeripheral() {
+    peripherals = [...peripherals, { type: 'monitor', brand: '', model: '', serialNumber: '', capacity: '', propertyTag: '' }];
   }
+  function removePeripheral(index: number) {
+    peripherals = peripherals.filter((_, i) => i !== index);
+  }
+
+  // ── When the selected Category IS itself a peripheral type (Monitor,
+  //    Keyboard, Printer, etc.), this asset IS that item — no separate
+  //    "Peripherals" row for it. It still needs Brand/Model/Property Tag
+  //    though, so a small Specs card replaces the generic rows in that case. ────
+  const isPeripheralCategory = $derived((() => {
+    const name = (categories.find(c => c.id === categoryId)?.name ?? '').toLowerCase();
+    return PERIPHERAL_TYPES.some(t => name.includes(t.value.replace(/_/g, ' ')) || name.includes(t.label.toLowerCase()));
+  })());
+  let periphBrand       = $state('');
+  let periphModel       = $state('');
+  let periphPropertyTag = $state('');
 
   onMount(async () => {
     [categories, branches] = await Promise.all([
       api.get<Category[]>('/api/categories').catch(() => []),
       api.get<Branch[]>('/api/branches').catch(() => []),
     ]);
-    // Old /assets/add/computer bookmarks redirect here with ?type=computer —
-    // pre-select the first computer/laptop category as a convenience; it no
-    // longer gates anything, the specs fields are already on this page.
-    if ($page.url.searchParams.get('type') === 'computer' && !categoryId) {
-      const computerCategory = categories.find((c) => isComputerCategoryName(c.name));
-      if (computerCategory) categoryId = computerCategory.id;
+
+    const typeParam = $page.url.searchParams.get('type');
+    const typePatterns: Record<string, RegExp> = {
+      computer: /desktop|laptop|computer/i,
+      camera:   /camera|cctv/i,
+      recorder: /nvr|dvr|recorder/i,
+    };
+    const pattern = typeParam ? typePatterns[typeParam] : undefined;
+    if (pattern) {
+      const match = categories.find(c => pattern.test(c.name));
+      if (match) categoryId = match.id;
     }
   });
 
   $effect(() => {
-    if (hasComputerSpecs && ownership !== 'company') ownership = 'company';
+    if (isComputerCategory && !ciLoaded) void ciInit();
   });
-
-  $effect(() => {
-    if (!branchId || !computerAllowed) { employees = []; return; }
-    api.get<{ employees: EmployeeOption[] }>(`/api/computer-intake/lookups?branchId=${encodeURIComponent(branchId)}`)
-      .then((res) => { employees = res.employees; })
-      .catch(() => { employees = []; });
-  });
-
-  function addComponent(type: 'ram' | 'storage') { components = [...components, { type }]; }
-  function removeComponent(index: number) { components = components.filter((_, i) => i !== index); }
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function handleAddPhotos(e: Event) {
@@ -149,71 +216,319 @@
     input.value = '';
   }
 
-  async function submitComputerAsset() {
-    if (!computerAllowed) throw new Error('You need Admin or Super Admin access with inventory creation permission to save specifications.');
-    if (!branchId) throw new Error('Branch is required when specifications are filled in.');
+  function handleCancel() {
+    goto('/assets');
+  }
 
-    if (pendingDuplicateConfirm && pendingDraftId) {
-      await api.post(`/api/computer-intake/drafts/${pendingDraftId}/submit`, { expectedUpdatedAt: pendingDraftVersion }, { 'Idempotency-Key': `computer-intake-${pendingDraftId}-${pendingDraftVersion}` });
-      resetPendingConfirm();
-      return;
-    }
+  let attachmentFile = $state<File | null>(null);
+  function handleAttachmentChange(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    attachmentFile = input.files?.[0] ?? null;
+  }
+  async function uploadAttachment(assetId: string) {
+    if (!attachmentFile) return;
+    const form = new FormData();
+    form.append('file', attachmentFile);
+    await api.raw(`/api/assets/${assetId}/attachments`, { method: 'POST', body: form });
+  }
 
-    const payload = {
-      name: assetName.trim(), assetTag: assetTag.trim() || undefined, computerName: computerName.trim() || undefined,
-      serialNumber: serialNumber.trim() || undefined, brand: brand.trim() || undefined, model: model.trim() || undefined,
-      deviceType, categoryId: categoryId || undefined, branchId, employeeId: employeeId || undefined,
-      ownership: 'company', condition, status: 'active', description: description.trim() || undefined,
-      purchaseDate: purchaseDate || undefined, warrantyExpiry: warrantyExpiry || undefined,
-      processor: processor.trim() || undefined, motherboard: motherboard.trim() || undefined,
-      operatingSystem: operatingSystem.trim() || undefined, osVersion: osVersion.trim() || undefined,
-      osInstallDate: osInstallDate || undefined, components,
+  // ── Computer / Laptop specs: same form, same submit. Only relevant when the
+  //    selected category is a computer/laptop category — inline in the page,
+  //    no separate tab, no separate review screen. ─────────────────────────────
+  type CiComponent = { type: 'ram' | 'storage'; slotOrBay?: string; brand?: string; model?: string; serialNumber?: string; capacity?: string; storageKind?: string };
+  type CiOption = { id: string; name: string; employeeId?: string | null };
+
+  let ciComputerName    = $state('');
+  let ciBrand           = $state('');
+  let ciModel           = $state('');
+  let ciProcessor       = $state('');
+  let ciMotherboard     = $state('');
+  let ciOperatingSystem = $state('');
+  let ciOsVersion       = $state('');
+  let ciOsInstallDate   = $state('');
+  let ciEmployeeId      = $state('');
+  let ciComponents      = $state<CiComponent[]>([]);
+
+  let ciEmployees  = $state<CiOption[]>([]);
+  let ciError      = $state('');
+  let ciForbidden  = $state(false);
+  let ciDraftId       = $state('');
+  let ciDraftVersion  = $state('');
+  let pendingDuplicateConfirm = $state(false);
+  let duplicateComputerNameWarning = $state(false);
+  let tagUnavailableError = $state('');
+
+  $effect(() => {
+    void assetName;
+    pendingDuplicateConfirm = false;
+    duplicateComputerNameWarning = false;
+    tagUnavailableError = '';
+  });
+
+  const computerAllowed = $derived(
+    can('create_inventory') && ['admin', 'super_admin'].includes((authStore.user?.role ?? '').trim().toLowerCase())
+  );
+
+  async function ciInit() {
+    ciLoaded = true;
+    if (!computerAllowed) { ciForbidden = true; return; }
+    try {
+      const lookup = await api.get<{ employees: CiOption[] }>('/api/computer-intake/lookups');
+      ciEmployees = lookup.employees;
+    } catch (e) { ciError = (e as Error).message; }
+  }
+
+  function ciAddComponent(type: 'ram' | 'storage') { ciComponents = [...ciComponents, { type }]; }
+  function ciRemoveComponent(index: number) { ciComponents = ciComponents.filter((_, i) => i !== index); }
+
+  function ciDraftBody() {
+    const deviceType = /laptop/i.test(categories.find(c => c.id === categoryId)?.name ?? '') ? 'laptop' : 'computer';
+    return {
+      name: assetName.trim(),
+      computerName: ciComputerName.trim(),
+      serialNumber: serialNumber.trim(),
+      brand: ciBrand.trim(),
+      model: ciModel.trim(),
+      deviceType,
+      categoryId,
+      branchId,
+      employeeId: ciEmployeeId,
+      ownership,
+      condition,
+      status: 'active',
+      description: description.trim(),
+      purchaseDate,
+      warrantyExpiry,
+      processor: ciProcessor.trim(),
+      motherboard: ciMotherboard.trim(),
+      operatingSystem: ciOperatingSystem.trim(),
+      osVersion: ciOsVersion.trim(),
+      osInstallDate: ciOsInstallDate,
+      components: ciComponents,
     };
-    const draft = await api.post<{ id: string; updatedAt: string }>('/api/computer-intake/drafts', payload);
-    const check = await api.get<{ duplicateComputerName: boolean; assetTagAvailable: boolean; updatedAt: string }>(`/api/computer-intake/drafts/${draft.id}/preflight`);
-    if (!check.assetTagAvailable) {
-      await api.raw(`/api/computer-intake/drafts/${draft.id}`, { method: 'DELETE' }).catch(() => {});
-      throw new Error('This asset tag is already in use. Change it before saving.');
+  }
+
+  async function submitComputerAsset() {
+    ciError = ''; tagUnavailableError = '';
+
+    const body = ciDraftId ? { ...ciDraftBody(), expectedUpdatedAt: ciDraftVersion } : ciDraftBody();
+    const row = ciDraftId
+      ? await api.put<{ id: string; updatedAt: string }>(`/api/computer-intake/drafts/${ciDraftId}`, body)
+      : await api.post<{ id: string; updatedAt: string }>('/api/computer-intake/drafts', body);
+    ciDraftId = row.id; ciDraftVersion = row.updatedAt;
+
+    if (!pendingDuplicateConfirm) {
+      const check = await api.get<{ duplicateComputerName: boolean; assetTagAvailable: boolean; updatedAt: string }>(`/api/computer-intake/drafts/${ciDraftId}/preflight`);
+      ciDraftVersion = check.updatedAt;
+      if (!check.assetTagAvailable) {
+        tagUnavailableError = 'This asset tag is already in use. Change it before saving.';
+        return;
+      }
+      if (check.duplicateComputerName) {
+        duplicateComputerNameWarning = true;
+        pendingDuplicateConfirm = true;
+        return;
+      }
     }
-    if (check.duplicateComputerName) {
-      pendingDuplicateConfirm = true; pendingDraftId = draft.id; pendingDraftVersion = check.updatedAt;
-      duplicateWarningText = 'A computer with this network name already exists in this branch. Click "Save Anyway" to confirm this is a separate device.';
-      return;
+
+    const created = await api.post<{ id: string }>(`/api/computer-intake/drafts/${ciDraftId}/submit`, { expectedUpdatedAt: ciDraftVersion }, { 'Idempotency-Key': `computer-intake-${ciDraftId}-${ciDraftVersion}` });
+    await uploadAttachment(created.id);
+    goto('/assets');
+  }
+
+  async function submitPlainAsset() {
+    return api.post<{ id: string }>('/api/assets', {
+      name:               assetName.trim(),
+      serialNumber:       serialNumber.trim() || null,
+      categoryId:         categoryId || null,
+      branchId:           branchId || null,
+      condition,
+      ownership,
+      description:        description.trim() || null,
+      warrantyExpiry:     warrantyExpiry || null,
+      nextMaintenanceDate: enableMaintenance && nextMaintenance ? nextMaintenance : null,
+      imeiNumber:         isPhoneCategory && phoneImei.trim() ? phoneImei.trim() : null,
+      propertyTag:        isPhoneCategory && phonePropertyTag.trim()
+                             ? phonePropertyTag.trim()
+                             : isPeripheralCategory && periphPropertyTag.trim() ? periphPropertyTag.trim() : null,
+    });
+  }
+
+  async function attachPeripheralSpecs(assetId: string) {
+    if (!periphBrand.trim() && !periphModel.trim()) return;
+    await api.put(`/api/assets/${assetId}/device-profile`, {
+      brand: periphBrand.trim() || undefined,
+      model: periphModel.trim() || undefined,
+    });
+  }
+
+  async function attachPeripherals(assetId: string) {
+    if (peripherals.length === 0) return;
+    await api.post(`/api/assets/${assetId}/components`, {
+      components: peripherals.map(p => ({
+        type: p.type,
+        brand: p.brand.trim() || undefined,
+        model: p.model.trim() || undefined,
+        serialNumber: p.serialNumber.trim() || undefined,
+        capacity: p.capacity.trim() || undefined,
+        propertyTag: p.propertyTag.trim() || undefined,
+      })),
+    });
+  }
+
+  async function submitPhoneAsset() {
+    const asset = await submitPlainAsset();
+    if (phoneBrand.trim() || phoneModel.trim() || phoneNotes.trim()) {
+      const idempotencyKey = `phone-${asset.id}-${Date.now()}`;
+      await api.post('/api/phones', {
+        assetId: asset.id,
+        brand: phoneBrand.trim() || undefined,
+        model: phoneModel.trim() || undefined,
+        notes: phoneNotes.trim() || undefined,
+      }, { 'Idempotency-Key': idempotencyKey });
     }
-    await api.post(`/api/computer-intake/drafts/${draft.id}/submit`, { expectedUpdatedAt: check.updatedAt }, { 'Idempotency-Key': `computer-intake-${draft.id}-${check.updatedAt}` });
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
+  }
+
+  async function submitAccessPointAsset() {
+    if (!apPhysicalLocation.trim()) { submitErr = 'Physical location is required for an access point.'; return; }
+    const asset = await submitPlainAsset();
+    const idempotencyKey = `access-point-${asset.id}-${Date.now()}`;
+    await api.post('/api/network/access-points', {
+      assetId: asset.id,
+      physicalLocation: apPhysicalLocation.trim(),
+      notes: apNotes.trim() || undefined,
+    }, { 'Idempotency-Key': idempotencyKey });
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
+  }
+
+  async function submitSwitchAsset() {
+    if (!swPhysicalLocation.trim()) { submitErr = 'Physical location is required for a switch.'; return; }
+    const asset = await submitPlainAsset();
+    const idempotencyKey = `switch-${asset.id}-${Date.now()}`;
+    await api.post('/api/network/switches', {
+      assetId: asset.id,
+      switchType: swSwitchType,
+      physicalLocation: swPhysicalLocation.trim(),
+      portCount: swPortCount.trim() ? Number(swPortCount) : undefined,
+      notes: swNotes.trim() || undefined,
+    }, { 'Idempotency-Key': idempotencyKey });
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
+  }
+
+  async function submitCameraAsset() {
+    if (!camPhysicalLocation.trim()) { submitErr = 'Physical location is required for a camera.'; return; }
+    const asset = await submitPlainAsset();
+    const idempotencyKey = `camera-${asset.id}-${Date.now()}`;
+    await api.post('/api/cctv/cameras', {
+      assetId: asset.id,
+      physicalLocation: camPhysicalLocation.trim(),
+      coverageArea: camCoverageArea.trim() || undefined,
+      cameraType: camType,
+      resolution: camResolution.trim() || undefined,
+      nightVision: camNightVision,
+      motionDetection: camMotionDetection,
+      installationDate: camInstallationDate || undefined,
+      notes: camNotes.trim() || undefined,
+    }, { 'Idempotency-Key': idempotencyKey });
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
+  }
+
+  async function submitRecorderAsset() {
+    if (!recPhysicalLocation.trim()) { submitErr = 'Physical location is required for a recorder.'; return; }
+    const capacity = Number(recChannelCapacity);
+    if (!Number.isInteger(capacity) || capacity < 1) { submitErr = 'Channel capacity must be a whole number of at least 1.'; return; }
+    const asset = await submitPlainAsset();
+    const idempotencyKey = `recorder-${asset.id}-${Date.now()}`;
+    await api.post('/api/cctv/recorders', {
+      assetId: asset.id,
+      recorderType: recRecorderType,
+      channelCapacity: capacity,
+      physicalLocation: recPhysicalLocation.trim(),
+      storageCapacityBytes: recStorageCapacityGb.trim() ? Number(recStorageCapacityGb) * 1_000_000_000 : undefined,
+      retentionDaysTarget: recRetentionDaysTarget.trim() ? Number(recRetentionDaysTarget) : undefined,
+      notes: recNotes.trim() || undefined,
+    }, { 'Idempotency-Key': idempotencyKey });
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
+  }
+
+  async function submitServerAsset() {
+    if (!srvServiceOwner.trim()) { submitErr = 'Service owner is required for a server.'; return; }
+    const asset = await submitPlainAsset();
+    const profileKey = `server-profile-${asset.id}-${Date.now()}`;
+    await api.put(`/api/servers/${asset.id}/profile`, {
+      environment: srvEnvironment,
+      criticality: srvCriticality,
+      virtualizationRole: srvVirtualization,
+      serviceOwner: srvServiceOwner.trim(),
+      supportOwner: srvSupportOwner.trim() || undefined,
+      purpose: srvPurpose.trim() || undefined,
+    }, { 'Idempotency-Key': profileKey });
+
+    if (srvMotherboard.trim() || srvProcessor.trim()) {
+      await api.put(`/api/assets/${asset.id}/device-profile`, {
+        motherboard: srvMotherboard.trim() || undefined,
+        processor: srvProcessor.trim() || undefined,
+      });
+    }
+
+    if (srvRoleType) {
+      const roleKey = `server-role-${asset.id}-${Date.now()}`;
+      await api.post(`/api/servers/${asset.id}/roles`, { roleType: srvRoleType }, { 'Idempotency-Key': roleKey });
+    }
+
+    await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+    goto('/assets');
   }
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
+    submitErr = '';
     if (!assetName.trim()) { submitErr = 'Asset name is required.'; return; }
-    submitting = true; submitErr = '';
+    if (!branchId) { submitErr = 'Branch is required. If this asset has no assigned branch yet, add a Warehouse branch first from the Branches page.'; return; }
+    submitting = true;
     try {
-      if (hasComputerSpecs || pendingDuplicateConfirm) {
+      if (isComputerCategory && computerAllowed) {
         await submitComputerAsset();
-        if (pendingDuplicateConfirm) { submitting = false; return; } // duplicate warning shown — wait for confirm click
+      } else if (isAccessPointCategory) {
+        await submitAccessPointAsset();
+      } else if (isSwitchCategory) {
+        await submitSwitchAsset();
+      } else if (isPhoneCategory) {
+        await submitPhoneAsset();
+      } else if (isCameraCategory) {
+        await submitCameraAsset();
+      } else if (isRecorderCategory) {
+        await submitRecorderAsset();
+      } else if (isServerCategory) {
+        await submitServerAsset();
       } else {
-        await api.post('/api/assets', {
-          name:               assetName.trim(),
-          serialNumber:       serialNumber.trim() || null,
-          categoryId:         categoryId || null,
-          branchId:           branchId || null,
-          condition,
-          ownership,
-          description:        description.trim() || null,
-          warrantyExpiry:     warrantyExpiry || null,
-          nextMaintenanceDate: enableMaintenance && nextMaintenance ? nextMaintenance : null,
-        });
+        const asset = await submitPlainAsset();
+        if (isPeripheralCategory) {
+          await attachPeripheralSpecs(asset.id);
+          await uploadAttachment(asset.id);
+        } else {
+          await attachPeripherals(asset.id);
+    await uploadAttachment(asset.id);
+        }
+        goto('/assets');
       }
-      goto('/assets');
     } catch (e) {
       submitErr = (e as Error).message;
+    } finally {
       submitting = false;
-      resetPendingConfirm();
     }
-  }
-
-  function handleCancel() {
-    goto('/assets');
   }
 </script>
 
@@ -244,15 +559,12 @@
           Scan Asset
         </a>
       </div>
-      <button type="submit" form="add-asset-form" class="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : pendingDuplicateConfirm ? 'Save Anyway' : 'Save Asset'}</button>
+      <button type="submit" form="add-asset-form" class="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : 'Save Asset'}</button>
     </div>
   </header>
 
   {#if submitErr}
     <div class="form-error">{submitErr}</div>
-  {/if}
-  {#if duplicateWarningText}
-    <div class="form-warning" role="alert">{duplicateWarningText}</div>
   {/if}
 
   <form id="add-asset-form" onsubmit={handleSubmit} class="form-body" novalidate>
@@ -348,7 +660,7 @@
                   id="serial-number"
                   type="text"
                   class="field-input"
-                  placeholder="e.g. SN-A10021"
+                  placeholder="Leave blank if not applicable"
                   bind:value={serialNumber}
                 />
               </div>
@@ -372,9 +684,9 @@
                 </select>
               </div>
               <div class="field">
-                <label class="field-label" for="branch">Branch / Location</label>
-                <select id="branch" class="field-select" bind:value={branchId} oninput={resetPendingConfirm}>
-                  <option value="">— No branch —</option>
+                <label class="field-label" for="branch">Branch <span class="required">*</span></label>
+                <select id="branch" class="field-select" bind:value={branchId}>
+                  <option value="">— Select branch —</option>
                   {#each branches as b}
                     <option value={b.id}>{b.name}</option>
                   {/each}
@@ -382,12 +694,11 @@
               </div>
               <div class="field">
                 <label class="field-label" for="ownership">Ownership</label>
-                <select id="ownership" class="field-select" bind:value={ownership} disabled={hasComputerSpecs}>
+                <select id="ownership" class="field-select" bind:value={ownership}>
                   {#each OWNERSHIPS as o}
                     <option value={o.value}>{o.label}</option>
                   {/each}
                 </select>
-                {#if hasComputerSpecs}<span class="field-hint">Assets with specifications filled in are company-owned only.</span>{/if}
               </div>
 
               <!-- Row 3 -->
@@ -429,109 +740,438 @@
           <div class="field attachment-field">
             <label class="field-label" for="attachment">Attachment</label>
             <label class="attach-btn" for="attachment">Choose File</label>
-            <input id="attachment" type="file" class="sr-only" accept=".pdf,.csv,.zip,.docx,.xlsx,.jpeg,.jpg,.png" />
-            <p class="upload-hint" style="margin-top: 8px;">Max file size: 5MB<br />PDF, CSV, ZIP, DOCX, XLSX, JPEG</p>
+            <input id="attachment" type="file" class="sr-only" accept=".pdf,.csv,.zip,.docx,.xlsx,.jpeg,.jpg,.png" onchange={handleAttachmentChange} />
+            {#if attachmentFile}
+              <p class="upload-hint" style="margin-top: 8px;">{attachmentFile.name} ({(attachmentFile.size / 1024).toFixed(0)} KB) <button type="button" class="link-btn" onclick={() => attachmentFile = null}>Remove</button></p>
+            {:else}
+              <p class="upload-hint" style="margin-top: 8px;">Max file size: 5MB<br />PDF, CSV, ZIP, DOCX, XLSX, JPEG</p>
+            {/if}
           </div>
         </div>
       </section>
 
-      <!-- ── Computer / Laptop Specifications — always part of the one form.
-           Fill any of these in and Save Asset routes through the
-           computer-intake path instead of the plain asset path; leave them
-           all blank and it's a regular asset. ─────────────────────────────── -->
-      <section class="card" aria-label="Computer specifications">
-        <div class="card-header">
-          <h2 class="card-title">Computer / Laptop Specifications</h2>
-          <span class="card-title-hint">Optional — fill in to save this as a computer/laptop with a device profile</span>
-        </div>
-        <div class="card-body">
-          {#if !computerAllowed}
-            <p class="page-subtitle" style="margin-bottom: 12px;">You need Admin or Super Admin access with inventory creation permission to save specifications.</p>
-          {/if}
-          <fieldset class="specs-fieldset" disabled={!computerAllowed}>
-              <div class="fields-grid">
-                <div class="field">
-                  <label class="field-label" for="ci-tag">Asset Tag</label>
-                  <input id="ci-tag" class="field-input" bind:value={assetTag} oninput={resetPendingConfirm} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-netname">Network Computer Name</label>
-                  <input id="ci-netname" class="field-input" bind:value={computerName} oninput={resetPendingConfirm} placeholder="e.g. Finance-LT-014" />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-devicetype">Device Type</label>
-                  <select id="ci-devicetype" class="field-select" bind:value={deviceType}>
-                    <option value="computer">Desktop</option>
-                    <option value="laptop">Laptop</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-brand">Brand</label>
-                  <input id="ci-brand" class="field-input" bind:value={brand} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-model">Model</label>
-                  <input id="ci-model" class="field-input" bind:value={model} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-employee">Custodian / Employee</label>
-                  <select id="ci-employee" class="field-select" bind:value={employeeId} oninput={resetPendingConfirm}>
-                    <option value="">Leave unassigned</option>
-                    {#each employees as item}<option value={item.id}>{item.name}{item.employeeId ? ` · ${item.employeeId}` : ''}</option>{/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-cpu">Processor</label>
-                  <input id="ci-cpu" class="field-input" bind:value={processor} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-mobo">Motherboard</label>
-                  <input id="ci-mobo" class="field-input" bind:value={motherboard} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-os">Operating System</label>
-                  <input id="ci-os" class="field-input" bind:value={operatingSystem} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-osver">OS Version</label>
-                  <input id="ci-osver" class="field-input" bind:value={osVersion} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for="ci-osdate">OS Install Date</label>
-                  <DatePicker bind:value={osInstallDate} id="ci-osdate" placeholder="Pick install date" />
-                </div>
-              </div>
+      <!-- ── Computer / laptop specs: shown inline once Category is Computer/Laptop.
+           Same form, same submit button — no separate mode or review step. ────── -->
+      {#if isComputerCategory}
+        <section class="card ci-card" aria-label="Computer or laptop specifications">
+          <div class="card-header">
+            <h2 class="card-title">Computer / Laptop Specs</h2>
+          </div>
+          <div class="card-body">
+            {#if !computerAllowed}
+              <div class="form-notice form-notice-muted">You need Admin or Super Admin access with inventory creation permission to fill in computer specs. This asset will be saved without them.</div>
+            {:else}
+              <p class="ci-hint">This section appears because the category above is Computer or Laptop. Change the category and it disappears — no data is lost. Asset Tag is assigned automatically on save.</p>
 
-              <div class="card-divider" style="margin: 20px 0;"></div>
+              {#if duplicateComputerNameWarning}
+                <div class="form-warning" role="alert">This computer name already exists in the branch. Submit again to save it anyway as a separate device.</div>
+              {/if}
+              {#if tagUnavailableError}
+                <div class="form-error" role="alert">{tagUnavailableError}</div>
+              {/if}
 
-              <div class="components-block">
-                <div class="components-head">
-                  <h3 class="card-title" style="font-size: 13px;">RAM and Storage</h3>
-                  <div class="header-left">
-                    <button type="button" class="btn btn-ghost" onclick={() => addComponent('ram')}>+ RAM row</button>
-                    <button type="button" class="btn btn-ghost" onclick={() => addComponent('storage')}>+ Storage row</button>
+              <fieldset class="specs-fieldset" disabled={submitting}>
+                <div class="fields-grid">
+                  <div class="field">
+                    <label class="field-label" for="ci-netname">Computer Name</label>
+                    <input id="ci-netname" class="field-input" bind:value={ciComputerName} placeholder="e.g. Finance-LT-014" />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-brand">Brand</label>
+                    <input id="ci-brand" class="field-input" bind:value={ciBrand} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-model">Model</label>
+                    <input id="ci-model" class="field-input" bind:value={ciModel} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-cpu">Processor</label>
+                    <input id="ci-cpu" class="field-input" bind:value={ciProcessor} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-mobo">Motherboard</label>
+                    <input id="ci-mobo" class="field-input" bind:value={ciMotherboard} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-os">Operating System</label>
+                    <input id="ci-os" class="field-input" bind:value={ciOperatingSystem} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-osver">OS Version</label>
+                    <input id="ci-osver" class="field-input" bind:value={ciOsVersion} />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-osdate">OS Install Date</label>
+                    <DatePicker bind:value={ciOsInstallDate} id="ci-osdate" placeholder="Pick install date" />
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ci-employee">Assigned Employee</label>
+                    <select id="ci-employee" class="field-select" bind:value={ciEmployeeId}>
+                      <option value="">Leave unassigned</option>
+                      {#each ciEmployees as item}<option value={item.id}>{item.name}{item.employeeId ? ` · ${item.employeeId}` : ''}</option>{/each}
+                    </select>
                   </div>
                 </div>
-                {#if components.length === 0}
-                  <p class="page-subtitle">Optional repeatable component rows.</p>
-                {/if}
-                {#each components as component, index}
-                  <div class="component-row">
-                    <span class="component-type">{component.type === 'ram' ? 'RAM' : 'Storage'}</span>
-                    <input class="field-input" aria-label="Slot or bay" bind:value={component.slotOrBay} placeholder="Slot / bay" />
-                    <input class="field-input" aria-label="Brand" bind:value={component.brand} placeholder="Brand" />
-                    <input class="field-input" aria-label="Model" bind:value={component.model} placeholder="Model" />
-                    <input class="field-input" aria-label="Serial number" bind:value={component.serialNumber} placeholder="Serial" />
-                    <input class="field-input" aria-label="Capacity" bind:value={component.capacity} placeholder="Capacity" />
-                    <button type="button" class="component-remove" onclick={() => removeComponent(index)} aria-label="Remove row">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6L18 18"/></svg>
-                    </button>
+
+                <div class="card-divider" style="margin: 16px 0;"></div>
+
+                <div class="components-block">
+                  <div class="components-head">
+                    <h3 class="card-title" style="font-size: 13px;">RAM and Storage</h3>
+                    <div class="header-left">
+                      <button type="button" class="btn btn-ghost" onclick={() => ciAddComponent('ram')}>+ RAM row</button>
+                      <button type="button" class="btn btn-ghost" onclick={() => ciAddComponent('storage')}>+ Storage row</button>
+                    </div>
                   </div>
-                {/each}
+                  {#if ciComponents.length === 0}
+                    <p class="page-subtitle">Optional repeatable component rows.</p>
+                  {/if}
+                  {#each ciComponents as component, index}
+                    <div class="component-row">
+                      <span class="component-type">{component.type === 'ram' ? 'RAM' : 'Storage'}</span>
+                      <input class="field-input" aria-label="Slot or bay" bind:value={component.slotOrBay} placeholder="Slot / bay" />
+                      <input class="field-input" aria-label="Brand" bind:value={component.brand} placeholder="Brand" />
+                      <input class="field-input" aria-label="Model" bind:value={component.model} placeholder="Model" />
+                      <input class="field-input" aria-label="Serial number" bind:value={component.serialNumber} placeholder="Serial" />
+                      <input class="field-input" aria-label="Capacity" bind:value={component.capacity} placeholder="Capacity" />
+                      <button type="button" class="component-remove" onclick={() => ciRemoveComponent(index)} aria-label="Remove row">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6L18 18"/></svg>
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              </fieldset>
+            {/if}
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Access Point specs: inline once Category is Access Point. ──────────── -->
+      {#if isAccessPointCategory}
+        <section class="card ci-card" aria-label="Access point specifications">
+          <div class="card-header">
+            <h2 class="card-title">Access Point Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">Physical location only here. IP address and VLAN are recorded from <a href="/inventory/intake/network">Network Intake</a> after this asset is saved; login credentials are linked from the asset's own page.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="ap-location">Physical Location <span class="required">*</span></label>
+                <input id="ap-location" class="field-input" bind:value={apPhysicalLocation} placeholder="e.g. 2nd floor ceiling, Cubao" />
               </div>
-          </fieldset>
-        </div>
-      </section>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="ap-notes">Notes</label>
+              <textarea id="ap-notes" class="field-textarea-input" bind:value={apNotes} rows="3"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Switch specs: inline once Category is Switch. ──────────────────────── -->
+      {#if isSwitchCategory}
+        <section class="card ci-card" aria-label="Switch specifications">
+          <div class="card-header">
+            <h2 class="card-title">Switch Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">Port assignments and IP address are recorded from <a href="/inventory/intake/network">Network Intake</a> after this asset is saved; login credentials are linked from the asset's own page.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="sw-type">Switch Type</label>
+                <select id="sw-type" class="field-select" bind:value={swSwitchType}>
+                  <option value="unmanaged">Unmanaged</option>
+                  <option value="managed">Managed</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="sw-location">Physical Location <span class="required">*</span></label>
+                <input id="sw-location" class="field-input" bind:value={swPhysicalLocation} placeholder="e.g. Server room rack 2" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="sw-ports">Port Count</label>
+                <input id="sw-ports" type="number" min="1" max="512" class="field-input" bind:value={swPortCount} placeholder="e.g. 24" />
+              </div>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="sw-notes">Notes</label>
+              <textarea id="sw-notes" class="field-textarea-input" bind:value={swNotes} rows="3"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Phone specs: inline once Category is Phone. Company vs BYOD reads
+           from the Ownership field above — no separate control here. ─────────── -->
+      {#if isPhoneCategory}
+        <section class="card ci-card" aria-label="Phone specifications">
+          <div class="card-header">
+            <h2 class="card-title">Phone Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">Company vs BYOD uses the Ownership field above — set it to Personal for a BYOD phone.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="ph-brand">Brand</label>
+                <input id="ph-brand" class="field-input" bind:value={phoneBrand} placeholder="e.g. Samsung" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="ph-model">Model</label>
+                <input id="ph-model" class="field-input" bind:value={phoneModel} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="ph-imei">IMEI</label>
+                <input id="ph-imei" class="field-input" bind:value={phoneImei} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="ph-tag">Property Tag</label>
+                <input id="ph-tag" class="field-input" bind:value={phonePropertyTag} />
+              </div>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="ph-notes">Notes</label>
+              <textarea id="ph-notes" class="field-textarea-input" bind:value={phoneNotes} rows="3"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Camera specs: inline once Category is Camera/CCTV. ─────────────────── -->
+      {#if isCameraCategory}
+        <section class="card ci-card" aria-label="Camera specifications">
+          <div class="card-header">
+            <h2 class="card-title">Camera Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">Assign this camera to a recorder channel from its asset detail page after saving.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="cam-location">Physical Location <span class="required">*</span></label>
+                <input id="cam-location" class="field-input" bind:value={camPhysicalLocation} placeholder="e.g. Entrance, Cubao branch" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="cam-coverage">Coverage Area</label>
+                <input id="cam-coverage" class="field-input" bind:value={camCoverageArea} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="cam-type">Camera Type</label>
+                <select id="cam-type" class="field-select" bind:value={camType}>
+                  <option value="fixed">Fixed</option>
+                  <option value="dome">Dome</option>
+                  <option value="bullet">Bullet</option>
+                  <option value="ptz">PTZ</option>
+                  <option value="thermal">Thermal</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="cam-resolution">Resolution</label>
+                <input id="cam-resolution" class="field-input" bind:value={camResolution} placeholder="e.g. 4MP" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="cam-installed">Installation Date</label>
+                <DatePicker bind:value={camInstallationDate} id="cam-installed" placeholder="Pick install date" />
+              </div>
+            </div>
+            <div class="checkbox-pair" style="margin-top: 16px;">
+              <label class="checkbox-row">
+                <input type="checkbox" class="checkbox" bind:checked={camNightVision} />
+                <span class="checkbox-label">Night vision</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" class="checkbox" bind:checked={camMotionDetection} />
+                <span class="checkbox-label">Motion detection</span>
+              </label>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="cam-notes">Notes</label>
+              <textarea id="cam-notes" class="field-textarea-input" bind:value={camNotes} rows="3"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Recorder specs: inline once Category is NVR/DVR/recorder. ──────────── -->
+      {#if isRecorderCategory}
+        <section class="card ci-card" aria-label="Recorder specifications">
+          <div class="card-header">
+            <h2 class="card-title">Recorder Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">Assign cameras to this recorder's channels from its asset detail page after saving.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="rec-location">Physical Location <span class="required">*</span></label>
+                <input id="rec-location" class="field-input" bind:value={recPhysicalLocation} placeholder="e.g. Server room, Cubao branch" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="rec-capacity">Channel Capacity <span class="required">*</span></label>
+                <input id="rec-capacity" type="number" min="1" max="10000" class="field-input" bind:value={recChannelCapacity} placeholder="e.g. 16" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="rec-type">Recorder Type</label>
+                <select id="rec-type" class="field-select" bind:value={recRecorderType}>
+                  <option value="nvr">NVR</option>
+                  <option value="dvr">DVR</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="rec-storage">Storage Capacity (GB)</label>
+                <input id="rec-storage" type="number" min="0" class="field-input" bind:value={recStorageCapacityGb} placeholder="e.g. 2000" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="rec-retention">Retention Target (Days)</label>
+                <input id="rec-retention" type="number" min="0" class="field-input" bind:value={recRetentionDaysTarget} placeholder="e.g. 30" />
+              </div>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="rec-notes">Notes</label>
+              <textarea id="rec-notes" class="field-textarea-input" bind:value={recNotes} rows="3"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Server specs: inline once Category is Server. Domain Controller / File
+           Server are picked as a Role Type here, not separate categories. ─────── -->
+      {#if isServerCategory}
+        <section class="card ci-card" aria-label="Server specifications">
+          <div class="card-header">
+            <h2 class="card-title">Server Specs</h2>
+          </div>
+          <div class="card-body">
+            <p class="ci-hint">HDD rows go in the Peripherals section below (type: Docking Station / External HDD, or add a storage row). IP address is recorded from <a href="/inventory/intake/network">Network Intake</a>; ISP circuits and login credentials are linked from the Servers &amp; Circuits page after this asset is saved.</p>
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="srv-env">Environment</label>
+                <select id="srv-env" class="field-select" bind:value={srvEnvironment}>
+                  <option value="production">Production</option>
+                  <option value="staging">Staging</option>
+                  <option value="development">Development</option>
+                  <option value="test">Test</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-crit">Criticality</label>
+                <select id="srv-crit" class="field-select" bind:value={srvCriticality}>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-virt">Virtualization</label>
+                <select id="srv-virt" class="field-select" bind:value={srvVirtualization}>
+                  <option value="physical">Physical</option>
+                  <option value="hypervisor">Hypervisor</option>
+                  <option value="virtual_machine">Virtual Machine</option>
+                  <option value="container_host">Container Host</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-role">Role Type</label>
+                <select id="srv-role" class="field-select" bind:value={srvRoleType}>
+                  <option value="">— No specific role —</option>
+                  <option value="domain_controller">Domain Controller</option>
+                  <option value="file_server">File Server</option>
+                  <option value="application_server">Application Server</option>
+                  <option value="database_server">Database Server</option>
+                  <option value="backup_server">Backup Server</option>
+                  <option value="dns_server">DNS Server</option>
+                  <option value="dhcp_server">DHCP Server</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-owner">Service Owner <span class="required">*</span></label>
+                <input id="srv-owner" class="field-input" bind:value={srvServiceOwner} placeholder="e.g. IT Infrastructure" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-support">Support Owner</label>
+                <input id="srv-support" class="field-input" bind:value={srvSupportOwner} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-motherboard">Motherboard</label>
+                <input id="srv-motherboard" class="field-input" bind:value={srvMotherboard} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="srv-processor">Processor</label>
+                <input id="srv-processor" class="field-input" bind:value={srvProcessor} />
+              </div>
+            </div>
+            <div class="field field-textarea" style="margin-top: 16px;">
+              <label class="field-label" for="srv-purpose">Purpose</label>
+              <textarea id="srv-purpose" class="field-textarea-input" bind:value={srvPurpose} rows="2"></textarea>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Specs: shown when the Category itself IS a peripheral type
+           (Monitor, Keyboard, Printer, etc.) — this asset IS that item, so it
+           gets Brand/Model/Property Tag directly instead of the generic
+           repeatable Peripherals rows below. ────────────────────────────────── -->
+      {#if isPeripheralCategory}
+        <section class="card ci-card" aria-label="Specs">
+          <div class="card-header">
+            <h2 class="card-title">Specs</h2>
+          </div>
+          <div class="card-body">
+            <div class="fields-grid">
+              <div class="field">
+                <label class="field-label" for="periph-brand">Brand</label>
+                <input id="periph-brand" class="field-input" bind:value={periphBrand} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="periph-model">Model</label>
+                <input id="periph-model" class="field-input" bind:value={periphModel} />
+              </div>
+              <div class="field">
+                <label class="field-label" for="periph-tag">Property Tag</label>
+                <input id="periph-tag" class="field-input" bind:value={periphPropertyTag} />
+              </div>
+            </div>
+          </div>
+        </section>
+      {/if}
+
+      <!-- ── Peripherals: generic child rows, attached to whatever asset gets
+           created above regardless of category. Hidden for Computer/Laptop
+           (has its own RAM/Storage rows) and for a peripheral-type category
+           itself (this asset IS that item — see the Specs card above instead,
+           attaching another one to itself would be redundant). ───────────────── -->
+      {#if !isComputerCategory && !isPeripheralCategory}
+        <section class="card ci-card" aria-label="Peripherals">
+          <div class="card-header">
+            <h2 class="card-title">Peripherals</h2>
+            <button type="button" class="btn btn-ghost" onclick={addPeripheral}>+ Add peripheral</button>
+          </div>
+          <div class="card-body">
+            {#if peripherals.length === 0}
+              <p class="page-subtitle">Optional. Monitor, keyboard, mouse, printer, and other accessories attached to this asset.</p>
+            {/if}
+            {#each peripherals as peripheral, index}
+              <div class="component-row" style="grid-template-columns: 140px repeat(4, minmax(0, 1fr)) 34px;">
+                <select class="field-select" aria-label="Peripheral type" bind:value={peripheral.type}>
+                  {#each PERIPHERAL_TYPES as opt}<option value={opt.value}>{opt.label}</option>{/each}
+                </select>
+                <input class="field-input" aria-label="Brand" bind:value={peripheral.brand} placeholder="Brand" />
+                <input class="field-input" aria-label="Model" bind:value={peripheral.model} placeholder="Model" />
+                <input class="field-input" aria-label="Serial number" bind:value={peripheral.serialNumber} placeholder="Serial" />
+                <input class="field-input" aria-label="Property tag" bind:value={peripheral.propertyTag} placeholder="Property tag" />
+                <button type="button" class="component-remove" onclick={() => removePeripheral(index)} aria-label="Remove row">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6L18 18"/></svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
 
       <!-- ── Card 2: Additional Details ───────────────────────────────────────── -->
       <section class="card" aria-label="Additional details">
@@ -590,10 +1230,10 @@
         </div>
       </section>
 
-  </form>
+    </form>
 </div>
 
-<!-- Lightbox -->
+<!-- Lightbox (photo preview) -->
 {#if lightboxPhoto}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="lightbox-overlay" onclick={() => lightboxPhoto = null}>
@@ -692,23 +1332,6 @@
     color: var(--ink);
     font-family: var(--font-sans);
     letter-spacing: -0.2px;
-  }
-
-  .card-title-hint {
-    font-size: 12px;
-    color: var(--mute);
-    font-family: var(--font-sans);
-  }
-
-  .specs-fieldset {
-    border: 0;
-    padding: 0;
-    margin: 0;
-    min-width: 0;
-  }
-
-  .specs-fieldset:disabled {
-    opacity: 0.55;
   }
 
   /* ── Card main (image + fields side-by-side) ────────────────────────────── */
@@ -928,6 +1551,17 @@
     width: 200px;
   }
 
+  .link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent, #a15c2e);
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+  }
+
   /* ── Card body (additional details) ────────────────────────────────────── */
   .card-body {
     padding: 20px;
@@ -995,11 +1629,6 @@
     color: var(--body);
     font-family: var(--font-sans);
     letter-spacing: -0.1px;
-  }
-
-  .field-hint {
-    font-size: 12px;
-    color: var(--mute);
   }
 
   .required {
@@ -1142,6 +1771,20 @@
     font-family: var(--font-sans);
   }
 
+  .form-notice {
+    padding: 10px 14px;
+    background: oklch(94% 0.04 150);
+    color: oklch(35% 0.12 150);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    font-family: var(--font-sans);
+  }
+
+  .form-notice-muted {
+    background: var(--canvas-soft-2);
+    color: var(--body);
+  }
+
   .form-warning {
     padding: 10px 14px;
     background: var(--warning-soft);
@@ -1182,6 +1825,28 @@
   .btn-scan:hover {
     background: var(--canvas-soft-2);
     border-color: var(--hairline-strong);
+  }
+
+  /* ── Computer specs section ──────────────────────────────────────────────── */
+  .ci-hint {
+    font-size: 12.5px;
+    color: var(--mute);
+    font-family: var(--font-sans);
+    margin: 0 0 14px;
+  }
+  .ci-hint a { color: var(--link); text-decoration: underline; }
+
+  .specs-fieldset {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .specs-fieldset:disabled {
+    opacity: 0.6;
   }
 
   /* ── Computer intake: RAM/storage component rows ────────────────────────── */

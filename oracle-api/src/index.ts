@@ -7,11 +7,14 @@
 // hosted environments inject real env vars before the process starts).
 import "dotenv/config";
 import { startMaintenanceCron } from "./lib/maintenance";
+import { initWebSocketServer } from "./lib/ws";
 import app from "./app";
 
 const PORT = process.env.PORT ?? 3001;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Oracle API running on port ${PORT}`);
   if (process.env.MAINTENANCE_SCHEDULER_ENABLED === "true") startMaintenanceCron();
 });
+
+initWebSocketServer(server);

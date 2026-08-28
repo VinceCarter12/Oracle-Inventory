@@ -126,10 +126,10 @@
   }
 
   function statusIcon(s: FieldComparison['status']): string {
-    if (s === 'match') return '🟢';
-    if (s === 'warning') return '🟡';
-    if (s === 'missing' || s === 'added') return '⚫';
-    return '🔴';
+    if (s === 'match') return 'MATCH';
+    if (s === 'warning') return 'WARNING';
+    if (s === 'missing' || s === 'added') return 'FIELD';
+    return 'MISMATCH';
   }
 
   function explain(f: FieldComparison): string {
@@ -166,7 +166,7 @@
       <p class="page-sub">
         Scan submitted {fmtDate(scan.createdAt)}{scan.submittedBy ? ` by ${scan.submittedBy.name}` : ''}
         {#if scan.asset?.branch}· {scan.asset.branch.name}{/if}
-        · <button class="link-btn" onclick={viewRaw}>View original Belarc report</button>
+        {#if scan.fileName !== 'Manual entry'}· <button class="link-btn" onclick={viewRaw}>View original Belarc report</button>{/if}
         {#if scan.asset}· <button class="link-btn" onclick={() => goto(`/assets/${scan!.asset!.id}`)}>Open asset</button>{/if}
       </p>
     </div>
@@ -176,17 +176,17 @@
          class:ov-mismatch={scan.comparisonResult?.overallStatus === 'mismatch'}
          class:ov-warning={scan.comparisonResult?.overallStatus === 'warning'}>
       {#if scan.isBaseline}
-        <div class="ov-title">📌 BASELINE — this scan is the asset's reference point</div>
+        <div class="ov-title">BASELINE — this scan is the asset's reference point</div>
         <div class="muted">Later scans are compared against these specs. Accepted {fmtDate(scan.reviewedAt)}{scan.reviewedBy ? ` by ${scan.reviewedBy.name}` : ''}.</div>
       {:else if !scan.comparisonResult}
-        <div class="ov-title">⚪ NO BASELINE — nothing to compare against</div>
+        <div class="ov-title">NO BASELINE — nothing to compare against</div>
         <div class="muted">This scan was uploaded before the asset had a baseline. Accept it (or another scan) as the baseline to enable comparisons.</div>
       {:else if scan.comparisonResult.overallStatus === 'match'}
-        <div class="ov-title">🟢 MATCH — all {scan.comparisonResult.summary.match} compared fields identical</div>
+        <div class="ov-title">MATCH — all {scan.comparisonResult.summary.match} compared fields identical</div>
       {:else if scan.comparisonResult.overallStatus === 'warning'}
-        <div class="ov-title">🟡 WARNING — {issues.length} difference{issues.length === 1 ? '' : 's'} found, none hardware-critical</div>
+        <div class="ov-title">WARNING — {issues.length} difference{issues.length === 1 ? '' : 's'} found, none hardware-critical</div>
       {:else}
-        <div class="ov-title">🔴 MISMATCH — {issues.length} discrepanc{issues.length === 1 ? 'y' : 'ies'} found</div>
+        <div class="ov-title">MISMATCH — {issues.length} discrepanc{issues.length === 1 ? 'y' : 'ies'} found</div>
         <ul class="ov-list">
           {#each issues.filter((f) => f.tier === 'hard').slice(0, 5) as f}
             <li>{f.label || f.key}: {f.status === 'missing' ? 'missing from scan' : f.status === 'added' ? 'not in baseline' : `${f.baseline} → ${f.current}`}</li>

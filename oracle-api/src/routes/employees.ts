@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 import { logActivity } from "../lib/activity";
+import { isZohoConfigured, enrichEmployee } from "../lib/integrations/zoho";
 
 const router = Router();
 router.use(requireAuth);
@@ -16,12 +17,40 @@ const include = {
 };
 
 // GET /api/employees
-router.get("/", requirePermission("view_inventory"), async (_req: AuthRequest, res: Response) => {
-  const employees = await prisma.employee.findMany({
-    include,
-    orderBy: { name: "asc" },
-  });
-  res.json(employees);
+// Backward compatible: no page/limit → full array, unchanged for existing callers.
+// Pass page and/or limit to opt into { items, total, page, limit }; q filters by name/employeeId.
+router.get("/", requirePermission("view_inventory"), async (req: AuthRequest, res: Response) => {
+  const { q, page, limit, isActive } = req.query;
+
+  const where: Record<string, unknown> = {};
+  if (isActive === "true" || isActive === "false") where.isActive = isActive === "true";
+  if (typeof q === "string" && q.trim()) {
+    const term = q.trim();
+    where.OR = [
+      { name: { contains: term, mode: "insensitive" } },
+      { employeeId: { contains: term, mode: "insensitive" } },
+    ];
+  }
+
+  if (page === undefined && limit === undefined) {
+    const employees = await prisma.employee.findMany({ where, include, orderBy: { name: "asc" } });
+    res.json(employees);
+    return;
+  }
+
+  const pageNum  = Math.max(1, parseInt(String(page ?? "1"), 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(String(limit ?? "20"), 10) || 20));
+
+  const [items, total] = await Promise.all([
+    prisma.employee.findMany({
+      where, include, orderBy: { name: "asc" },
+      skip: (pageNum - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.employee.count({ where }),
+  ]);
+
+  res.json({ items, total, page: pageNum, limit: pageSize });
 });
 
 // GET /api/employees/:id
@@ -51,28 +80,73 @@ router.get("/:id", requirePermission("view_inventory"), async (req: AuthRequest,
   res.json(employee);
 });
 
+// Sequential EMP-### fallback when neither the admin nor Zoho supplies an
+// employeeId. `offset` lets the retry loop below step past a collision from
+// a race with another concurrent create.
+async function nextEmployeeId(offset = 0): Promise<string> {
+  const count = await prisma.employee.count();
+  return `EMP-${String(count + 1 + offset).padStart(3, "0")}`;
+}
+
 // POST /api/employees
+// When the admin supplies an email and Zoho Directory is configured, the
+// employee is matched against Zoho by that email — only fields the admin
+// left blank get filled in (employeeId, department). This is the only path
+// that pulls Zoho data into a manually-added employee; nothing is fetched
+// unless the admin enters an email here. If employeeId is still blank after
+// that (no email, or no Zoho match), one is auto-generated (EMP-###) rather
+// than blocking the save.
 router.post("/", requirePermission("manage_stock"), async (req: AuthRequest, res: Response) => {
   const { name, email, phone, employeeId, branchId, departmentId, position } = req.body;
   if (!name) { res.status(400).json({ error: "Employee name is required." }); return; }
-  if (!employeeId) { res.status(400).json({ error: "Employee ID is required." }); return; }
 
-  const employee = await prisma.employee.create({
-    data: {
-      name,
-      email:        email    || null,
-      phone:        phone    || null,
-      position:     position || null,
-      employeeId,
-      branchId:     branchId     || null,
-      departmentId: departmentId || null,
-      isActive:     true,
-      source:       "manual",
-    },
-    include,
-  });
-  await logActivity({ userId: req.user!.id, action: "create", entity: "Employee", entityId: employee.id, metadata: { name, employeeId } });
-  res.status(201).json(employee);
+  let resolvedEmployeeId: string | null = employeeId || null;
+  let resolvedDepartmentId: string | null = departmentId || null;
+  let source: "manual" | "zoho" = "manual";
+
+  if (email && isZohoConfigured()) {
+    const branch = branchId ? await prisma.branch.findUnique({ where: { id: branchId }, select: { name: true } }) : null;
+    const enriched = await enrichEmployee({ name, email, employeeId: employeeId || null, branchHint: branch?.name ?? null }).catch(() => null);
+    if (enriched?.source === "zoho") {
+      source = "zoho";
+      if (!resolvedEmployeeId && enriched.employeeId) resolvedEmployeeId = enriched.employeeId;
+      if (!resolvedDepartmentId && enriched.department && branchId) {
+        const dept = await prisma.department.findFirst({ where: { branchId, name: { equals: enriched.department, mode: "insensitive" } }, select: { id: true } });
+        if (dept) resolvedDepartmentId = dept.id;
+      }
+    }
+  }
+
+  const autoAssignId = !resolvedEmployeeId;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (autoAssignId) resolvedEmployeeId = await nextEmployeeId(attempt);
+    try {
+      const employee = await prisma.employee.create({
+        data: {
+          name,
+          email:        email    || null,
+          phone:        phone    || null,
+          position:     position || null,
+          employeeId:   resolvedEmployeeId,
+          branchId:     branchId     || null,
+          departmentId: resolvedDepartmentId,
+          isActive:     true,
+          source,
+        },
+        include,
+      });
+      await logActivity({ userId: req.user!.id, action: "create", entity: "Employee", entityId: employee.id, branchId: employee.branchId, metadata: { name, employeeId: resolvedEmployeeId, source } });
+      res.status(201).json(employee);
+      return;
+    } catch (e) {
+      const isUniqueConflict = typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+      const conflictedOnEmployeeId = isUniqueConflict && (e as { meta?: { target?: string[] } }).meta?.target?.includes("employeeId");
+      if (conflictedOnEmployeeId && autoAssignId) continue;
+      if (isUniqueConflict) { res.status(409).json({ error: "That email or employee ID is already in use." }); return; }
+      throw e;
+    }
+  }
+  res.status(500).json({ error: "Could not generate a unique employee ID. Try entering one manually." });
 });
 
 // PUT /api/employees/:id
@@ -97,7 +171,7 @@ router.put("/:id", requirePermission("manage_stock"), async (req: AuthRequest, r
     },
     include,
   });
-  await logActivity({ userId: req.user!.id, action: "update", entity: "Employee", entityId: employee.id, metadata: { name } });
+  await logActivity({ userId: req.user!.id, action: "update", entity: "Employee", entityId: employee.id, branchId: employee.branchId, metadata: { name } });
   res.json(employee);
 });
 
@@ -112,7 +186,7 @@ router.patch("/:id/status", requirePermission("manage_stock"), async (req: AuthR
     data: { isActive },
     include,
   });
-  await logActivity({ userId: req.user!.id, action: isActive ? "activate" : "deactivate", entity: "Employee", entityId: req.params.id, metadata: { name: existing.name } });
+  await logActivity({ userId: req.user!.id, action: isActive ? "activate" : "deactivate", entity: "Employee", entityId: req.params.id, branchId: employee.branchId, metadata: { name: existing.name } });
   res.json(employee);
 });
 
@@ -128,7 +202,7 @@ router.delete("/:id", requirePermission("manage_stock"), async (req: AuthRequest
     return;
   }
   await prisma.employee.delete({ where: { id: req.params.id } });
-  await logActivity({ userId: req.user!.id, action: "delete", entity: "Employee", entityId: req.params.id, metadata: { name: existing.name } });
+  await logActivity({ userId: req.user!.id, action: "delete", entity: "Employee", entityId: req.params.id, branchId: existing.branchId, metadata: { name: existing.name } });
   res.json({ success: true });
 });
 
