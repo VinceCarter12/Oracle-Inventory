@@ -31,9 +31,19 @@ import phoneRoutes from "./routes/phones";
 import infrastructureRoutes from "./routes/infrastructure";
 
 const app = express();
-const allowedOrigins = new Set(
-  (process.env.CORS_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean)
-);
+const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const productionFrontendOrigins = [
+  "https://oracle-inventory.vercel.app",
+  "https://oracle-inventory-vince-carters-projects.vercel.app",
+  "https://oracle-inventory-git-main-vince-carters-projects.vercel.app",
+];
+const allowedOrigins = new Set([
+  ...configuredOrigins,
+  ...(process.env.NODE_ENV === "production" ? productionFrontendOrigins : []),
+]);
 
 if (process.env.NODE_ENV === "production" && allowedOrigins.size === 0) {
   throw new Error("CORS_ALLOWED_ORIGINS must contain at least one trusted origin in production.");
