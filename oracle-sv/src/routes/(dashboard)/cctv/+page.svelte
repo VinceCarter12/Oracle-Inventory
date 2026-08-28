@@ -15,15 +15,24 @@
   let loading   = $state(true);
   let error     = $state('');
   let activeTab = $state<'cameras' | 'recorders'>('cameras');
+  let search = $state('');
+  let assignmentFilter = $state<'all' | 'assigned' | 'unassigned'>('all');
 
   const unassignedCameras = $derived(cameras.filter(c => c.assignments.length === 0).length);
+  const totalChannels = $derived(recorders.reduce((total, recorder) => total + recorder.channels.length, 0));
+  const usedChannels = $derived(recorders.reduce((total, recorder) => total + recorder.channels.filter(channel => channel.assignments.length > 0).length, 0));
 
   async function load() {
     loading = true; error = '';
     try {
+      const params = new URLSearchParams({ pageSize: '100' });
+      if (search.trim()) params.set('q', search.trim());
+      if (assignmentFilter !== 'all') params.set('assigned', assignmentFilter === 'assigned' ? 'true' : 'false');
+      const recorderParams = new URLSearchParams({ pageSize: '100' });
+      if (search.trim()) recorderParams.set('q', search.trim());
       const [cameraResponse, recorderResponse] = await Promise.all([
-        api.get<{ items: Camera[] }>('/api/cctv/cameras'),
-        api.get<{ items: Recorder[] }>('/api/cctv/recorders'),
+        api.get<{ items: Camera[] }>(`/api/cctv/cameras?${params}`),
+        api.get<{ items: Recorder[] }>(`/api/cctv/recorders?${recorderParams}`),
       ]);
       cameras = cameraResponse.items;
       recorders = recorderResponse.items;
@@ -36,6 +45,9 @@
 
   onMount(() => { void load(); });
   onDestroy(onChange(['CameraProfile', 'RecorderProfile', 'CameraChannelAssignment'], () => load()));
+  function onFilterKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') void load();
+  }
 </script>
 
 <svelte:head><title>CCTV and NVR — Oracle Inventory</title></svelte:head>
@@ -62,6 +74,7 @@
     <StatCard value={loading ? '—' : cameras.length} label="Cameras" helper="Profiles in scope" />
     <StatCard value={loading ? '—' : recorders.length} label="Recorders" helper="NVR profiles in scope" />
     <StatCard value={loading ? '—' : unassignedCameras} label="Unassigned" helper="Cameras with no channel" />
+    <StatCard value={loading ? '—' : `${usedChannels}/${totalChannels}`} label="Channels used" helper="Assigned / available channels" />
   </div>
 
   {#if loading || error}
@@ -69,6 +82,18 @@
       <TableStates loading={loading} error={error} loadingText="Loading CCTV inventory…" onRetry={load} />
     </div>
   {:else}
+    <div class="filter-bar">
+      <label class="search-label" for="cctv-search">Search inventory</label>
+      <input id="cctv-search" class="search-input" type="search" bind:value={search} onkeydown={onFilterKeydown} placeholder="Search camera, recorder, or location" />
+      <label class="filter-label" for="assignment-filter">Camera assignment</label>
+      <select id="assignment-filter" class="filter-select" bind:value={assignmentFilter} onchange={() => load()}>
+        <option value="all">All cameras</option>
+        <option value="assigned">Assigned</option>
+        <option value="unassigned">Unassigned</option>
+      </select>
+      <button class="btn-ghost filter-button" type="button" onclick={() => load()}>Apply</button>
+    </div>
+
     <div class="tabs" role="tablist">
       <button
         type="button"
@@ -168,7 +193,13 @@
   .btn-ghost:hover:not(:disabled) { background: var(--canvas-soft-2); }
   .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  .filter-bar { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto 170px auto; align-items: center; gap: 8px 10px; }
+  .search-label, .filter-label { color: var(--mute); font-size: 12px; font-weight: 600; }
+  .search-input, .filter-select { min-height: 34px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas); color: var(--ink); font: inherit; font-size: 13px; padding: 7px 10px; }
+  .search-input:focus, .filter-select:focus { outline: 2px solid color-mix(in srgb, var(--ink) 20%, transparent); outline-offset: 1px; }
+  .filter-button { min-height: 34px; }
 
   .card { background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden; }
   .table-card { display: flex; flex-direction: column; }
@@ -200,6 +231,6 @@
   .td-sub { display: block; color: var(--mute); font-size: 11.5px; margin-top: 2px; }
   .status-unassigned { color: var(--mute); }
 
-  @media (max-width: 900px) { .stats-row { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 640px) { .stats-row { grid-template-columns: 1fr; } .page-header { flex-direction: column; } }
+  @media (max-width: 1100px) { .stats-row { grid-template-columns: 1fr 1fr; } .filter-bar { grid-template-columns: auto 1fr; } .filter-select { width: 100%; } }
+  @media (max-width: 640px) { .stats-row { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .filter-bar { grid-template-columns: 1fr; } .search-label, .filter-label { margin-top: 4px; } }
 </style>
