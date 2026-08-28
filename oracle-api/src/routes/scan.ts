@@ -258,6 +258,7 @@ router.post(
       res.status(400).json({ error: "resultIds array is required" });
       return;
     }
+    if (!branchId) { res.status(400).json({ error: "Branch is required." }); return; }
 
     const room = await prisma.scanRoom.findUnique({ where: { id: req.params.roomId } });
     if (!room) { res.status(404).json({ error: "Room not found" }); return; }
@@ -404,6 +405,7 @@ router.patch(
     }
 
     // action === "accept" — create asset
+    if (!branchId) { res.status(400).json({ error: "Branch is required." }); return; }
     const p = result.parsedData as Record<string, unknown>;
     const asset = await prisma.asset.create({
       data: {
@@ -445,6 +447,7 @@ router.post(
       res.status(400).json({ error: "resultIds required" });
       return;
     }
+    if (action === "accept" && !branchId) { res.status(400).json({ error: "Branch is required." }); return; }
 
     const results = await prisma.scanResult.findMany({
       where: { id: { in: resultIds }, status: "pending" },

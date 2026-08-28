@@ -55,7 +55,7 @@ router.post("/", requirePermission("manage_stock"), async (req: AuthRequest, res
   });
 
   await logActivity({
-    userId: req.user!.id, action: "assign", entity: "Assignment", entityId: assignment.id,
+    userId: req.user!.id, action: "assign", entity: "Assignment", entityId: assignment.id, branchId: asset.branchId,
     metadata: { asset: asset.name, employee: employee.name },
   });
 
@@ -96,7 +96,7 @@ router.put("/:id/request-return", requirePermission("manage_stock"), async (req:
   });
 
   await logActivity({
-    userId: req.user!.id, action: "return_requested", entity: "Assignment", entityId: assignment.id,
+    userId: req.user!.id, action: "return_requested", entity: "Assignment", entityId: assignment.id, branchId: updated.asset.branch?.id ?? null,
     metadata: { asset: assignment.asset.name, employee: assignment.employee.name },
   });
 
@@ -132,7 +132,7 @@ router.put("/:id/approve-return", requirePermission("approve_transactions"), asy
   });
 
   await logActivity({
-    userId: req.user!.id, action: "return_approved", entity: "Assignment", entityId: assignment.id,
+    userId: req.user!.id, action: "return_approved", entity: "Assignment", entityId: assignment.id, branchId: updated.asset.branch?.id ?? null,
     metadata: { asset: assignment.asset.name, employee: assignment.employee.name },
   });
 
@@ -161,7 +161,7 @@ router.put("/:id/reject-return", requirePermission("approve_transactions"), asyn
   });
 
   await logActivity({
-    userId: req.user!.id, action: "return_rejected", entity: "Assignment", entityId: assignment.id,
+    userId: req.user!.id, action: "return_rejected", entity: "Assignment", entityId: assignment.id, branchId: updated.asset.branch?.id ?? null,
     metadata: { asset: assignment.asset.name, employee: assignment.employee.name, reason: notes },
   });
 
@@ -202,7 +202,7 @@ router.post("/:id/return", requirePermission("approve_transactions"), async (req
   });
 
   await logActivity({
-    userId: req.user!.id, action: "return_recorded", entity: "Assignment", entityId: assignment.id,
+    userId: req.user!.id, action: "return_recorded", entity: "Assignment", entityId: assignment.id, branchId: updated.asset.branch?.id ?? null,
     metadata: { asset: assignment.asset.name, employee: assignment.employee.name, notes },
   });
 

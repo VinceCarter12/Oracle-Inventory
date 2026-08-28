@@ -26,6 +26,8 @@ import cctvRoutes from "./routes/cctv";
 import secretReferenceRoutes from "./routes/secret-reference";
 import networkRoutes from "./routes/network";
 import networkMutationRoutes from "./routes/network-mutations";
+import networkDeviceRoutes from "./routes/network-devices";
+import phoneRoutes from "./routes/phones";
 import infrastructureRoutes from "./routes/infrastructure";
 
 const app = express();
@@ -104,9 +106,9 @@ apiRouter.use("/cctv", cctvRoutes);
 apiRouter.use("/secret-references", secretReferenceRoutes);
 apiRouter.use("/network", networkMutationRoutes);
 apiRouter.use("/network", networkRoutes);
+apiRouter.use("/network", networkDeviceRoutes);
+apiRouter.use("/phones", phoneRoutes);
 apiRouter.use("/", infrastructureRoutes);
-apiRouter.use("/network", networkMutationRoutes);
-apiRouter.use("/network", networkRoutes);
 
 app.use("/api", apiRouter);
 

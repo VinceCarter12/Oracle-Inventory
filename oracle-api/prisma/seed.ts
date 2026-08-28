@@ -23,6 +23,10 @@ const PERMISSIONS = [
   { id: "perm-import-inventory",    key: "import_inventory",    description: "Upload and import Excel/CSV inventory files" },
   { id: "perm-force-import",        key: "force_import",        description: "Force overwrite duplicates during import" },
   { id: "perm-scan-assets",        key: "scan_assets",         description: "Use OCR scanner to capture asset data" },
+  { id: "perm-view-stock",                     key: "view_stock",                     description: "View stock items, locations, and counts" },
+  { id: "perm-manage-infrastructure-assets",   key: "manage_infrastructure_assets",   description: "Manage network and infrastructure inventory" },
+  { id: "perm-view-sensitive-network-fields",  key: "view_sensitive_network_fields",  description: "View sensitive network addressing and topology fields" },
+  { id: "perm-approve-stock-adjustments",      key: "approve_stock_adjustments",      description: "Approve stock-count corrections" },
 ] as const;
 
 // ─── Role → permission mappings ───────────────────────────────────────────────
@@ -33,18 +37,20 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "perm-manage-users", "perm-assign-roles", "perm-view-reports", "perm-manage-stock",
     "perm-approve-transactions", "perm-access-logs", "perm-manage-settings", "perm-manage-branches",
     "perm-import-inventory", "perm-force-import", "perm-scan-assets",
+    "perm-view-stock", "perm-manage-infrastructure-assets", "perm-view-sensitive-network-fields", "perm-approve-stock-adjustments",
   ],
   "role-admin": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-delete-inventory",
     "perm-view-reports", "perm-manage-stock", "perm-approve-transactions", "perm-access-logs",
     "perm-import-inventory", "perm-scan-assets",
+    "perm-view-stock", "perm-manage-infrastructure-assets", "perm-view-sensitive-network-fields", "perm-approve-stock-adjustments",
   ],
   "role-staff": [
     "perm-view-inventory", "perm-create-inventory", "perm-edit-inventory", "perm-manage-stock",
-    "perm-scan-assets",
+    "perm-scan-assets", "perm-view-stock",
   ],
   "role-viewer": [
-    "perm-view-inventory", "perm-view-reports",
+    "perm-view-inventory", "perm-view-reports", "perm-view-stock",
   ],
 };
 
@@ -131,6 +137,7 @@ async function main() {
     { id: "cat-printer",   name: "Printer" },
     { id: "cat-network",   name: "Network Equipment" },
     { id: "cat-cctv",      name: "CCTV" },
+    { id: "cat-nvr",       name: "NVR" },
     { id: "cat-ip-phone",  name: "IP Phone" },
     { id: "cat-peripheral",name: "Peripheral" },
   ];
@@ -141,7 +148,7 @@ async function main() {
       create: { id: c.id, name: c.name },
     });
   }
-  console.log("✓ Categories: Laptop, Desktop, Phone, Monitor, Printer, Network, CCTV, IP Phone, Peripheral");
+  console.log("✓ Categories: Laptop, Desktop, Phone, Monitor, Printer, Network, CCTV, NVR, IP Phone, Peripheral");
 
   console.log("\nSeed complete.");
 }

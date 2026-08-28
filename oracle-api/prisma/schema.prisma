@@ -44,35 +44,37 @@ model UserPermission {
 }
 
 model SystemUser {
-  id                  String                @id @default(cuid())
-  name                String
-  email               String                @unique
-  password            String
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  phone               String?
-  position            String?
-  roleId              String?
-  status              UserStatus            @default(active)
-  mustChangePassword  Boolean               @default(false)
-  branchId            String?
-  activityLogs        ActivityLog[]
-  mappingPresets      ColumnMappingPreset[]
-  importHistory       ImportHistory[]
-  scanRooms           ScanRoom[]
-  submittedHwScans    HardwareScan[]        @relation("HardwareScanSubmitter")
-  reviewedHwScans     HardwareScan[]        @relation("HardwareScanReviewer")
-  branch              Branch?               @relation(fields: [branchId], references: [id])
-  role                Role?                 @relation(fields: [roleId], references: [id])
-  permissionOverrides UserPermission[]
-  intakeDrafts        ComputerIntakeDraft[]
-  reviewedObservations InventoryObservation[] @relation("InventoryObservationReviewer")
-  rolloutChanges       FeatureRollout[]       @relation("FeatureRolloutUpdater")
-  rolloutBranchChanges FeatureRolloutBranch[] @relation("FeatureRolloutBranchUpdater")
-  stockMovementsPerformed StockMovement[]     @relation("StockMovementPerformedBy")
-  stockMovementsApproved  StockMovement[]     @relation("StockMovementApprovedBy")
-  stockCountsStarted      StockCountSession[] @relation("StockCountStartedBy")
-  stockCountsApproved     StockCountSession[] @relation("StockCountApprovedBy")
+  id                      String                 @id @default(cuid())
+  name                    String
+  email                   String                 @unique
+  password                String
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  phone                   String?
+  position                String?
+  roleId                  String?
+  status                  UserStatus             @default(active)
+  mustChangePassword      Boolean                @default(false)
+  branchId                String?
+  activityLogs            ActivityLog[]
+  mappingPresets          ColumnMappingPreset[]
+  importHistory           ImportHistory[]
+  scanRooms               ScanRoom[]
+  submittedHwScans        HardwareScan[]         @relation("HardwareScanSubmitter")
+  reviewedHwScans         HardwareScan[]         @relation("HardwareScanReviewer")
+  branch                  Branch?                @relation(fields: [branchId], references: [id])
+  role                    Role?                  @relation(fields: [roleId], references: [id])
+  permissionOverrides     UserPermission[]
+  intakeDrafts            ComputerIntakeDraft[]
+  reviewedObservations    InventoryObservation[] @relation("InventoryObservationReviewer")
+  rolloutChanges          FeatureRollout[]       @relation("FeatureRolloutUpdater")
+  rolloutBranchChanges    FeatureRolloutBranch[] @relation("FeatureRolloutBranchUpdater")
+  stockMovementsPerformed StockMovement[]        @relation("StockMovementPerformedBy")
+  stockMovementsApproved  StockMovement[]        @relation("StockMovementApprovedBy")
+  stockCountsStarted      StockCountSession[]    @relation("StockCountStartedBy")
+  stockCountsApproved     StockCountSession[]    @relation("StockCountApprovedBy")
+  deviceCredentialChanges NetworkDeviceCredential[] @relation("NetworkDeviceCredentialUpdater")
+  uploadedAttachments     AssetAttachment[]
 }
 
 model OtpCode {
@@ -99,20 +101,20 @@ model ActivityLog {
 }
 
 model Branch {
-  id         String       @id @default(cuid())
-  name       String
-  address    String?
-  latitude   Float?
-  longitude  Float?
-  archivedAt DateTime?
-  createdAt  DateTime     @default(now())
-  assets     Asset[]
-  employees  Employee[]
-  departments Department[]
-  users      SystemUser[]
-  intakeDrafts ComputerIntakeDraft[]
+  id               String                 @id @default(cuid())
+  name             String
+  address          String?
+  latitude         Float?
+  longitude        Float?
+  archivedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  assets           Asset[]
+  employees        Employee[]
+  departments      Department[]
+  users            SystemUser[]
+  intakeDrafts     ComputerIntakeDraft[]
   featureOverrides FeatureRolloutBranch[]
-  stockLocations StockLocation[]
+  stockLocations   StockLocation[]
   vlans            Vlan[]
   portConnections  PortConnection[]
   ispCircuits      IspCircuit[]
@@ -170,35 +172,35 @@ model Category {
 }
 
 model Employee {
-  id           String            @id @default(cuid())
-  name         String
-  email        String?           @unique
-  phone        String?
-  employeeId   String?           @unique
-  departmentId String?
-  isActive     Boolean           @default(true)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  branchId     String?
-  source       String            @default("manual")
-  position     String?
-  assignments  AssetAssignment[]
-  branch       Branch?           @relation(fields: [branchId], references: [id])
-  department   Department?       @relation(fields: [departmentId], references: [id])
-  movementLogs MovementLog[]
+  id             String            @id @default(cuid())
+  name           String
+  email          String?           @unique
+  phone          String?
+  employeeId     String?           @unique
+  departmentId   String?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  branchId       String?
+  source         String            @default("manual")
+  position       String?
+  assignments    AssetAssignment[]
+  branch         Branch?           @relation(fields: [branchId], references: [id])
+  department     Department?       @relation(fields: [departmentId], references: [id])
+  movementLogs   MovementLog[]
   stockMovements StockMovement[]
 }
 
 model Asset {
-  id                  String            @id @default(cuid())
+  id                  String                       @id @default(cuid())
   name                String
   serialNumber        String?
   categoryId          String?
-  condition           AssetCondition    @default(usable)
-  ownership           OwnershipType     @default(company)
+  condition           AssetCondition               @default(usable)
+  ownership           OwnershipType                @default(company)
   description         String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
   nextMaintenanceDate DateTime?
   warrantyExpiry      DateTime?
   assetTag            String?
@@ -211,13 +213,13 @@ model Asset {
   propertyTag         String?
   lostAt              DateTime?
   lostStolenNotes     String?
-  status              AssetStatus       @default(active)
+  status              AssetStatus                  @default(active)
   notifiedDue         DateTime?
   notifiedReminder    DateTime?
   purchaseDate        DateTime?
-  branch              Branch?           @relation(fields: [branchId], references: [id])
-  category            Category?         @relation(fields: [categoryId], references: [id])
-  importHistory       ImportHistory?    @relation(fields: [importId], references: [id])
+  branch              Branch?                      @relation(fields: [branchId], references: [id])
+  category            Category?                    @relation(fields: [categoryId], references: [id])
+  importHistory       ImportHistory?               @relation(fields: [importId], references: [id])
   assignments         AssetAssignment[]
   movementLogs        MovementLog[]
   hardwareScans       HardwareScan[]
@@ -227,19 +229,39 @@ model Asset {
   stockMovements      StockMovement[]
   cameraProfile       CameraProfile?
   recorderProfile     RecorderProfile?
-  secretReferences    AssetSecretReference[] @relation("AssetSecretReferences")
+  accessPointProfile  AccessPointProfile?
+  switchProfile       SwitchProfile?
+  phoneProfile        PhoneProfile?
+  secretReferences    AssetSecretReference[]       @relation("AssetSecretReferences")
   networkInterfaces   NetworkInterface[]
   networkPorts        NetworkPort[]
+  deviceCredential    NetworkDeviceCredential?
   proposals           InventoryFieldProposal[]
   serverProfile       ServerProfile?
   firewallProfile     FirewallProfile?
   circuitEquipment    CircuitEquipmentAssignment[]
+  attachments         AssetAttachment[]
+}
+
+model AssetAttachment {
+  id           String     @id @default(cuid())
+  assetId      String
+  fileName     String
+  mimeType     String
+  fileSize     Int
+  data         Bytes
+  uploadedById String
+  createdAt    DateTime   @default(now())
+  asset        Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadedBy   SystemUser @relation(fields: [uploadedById], references: [id])
+
+  @@index([assetId])
 }
 
 model DeviceProfile {
-  id               String     @id @default(cuid())
-  assetId          String     @unique
-  deviceType       DeviceType @default(computer)
+  id               String           @id @default(cuid())
+  assetId          String           @unique
+  deviceType       DeviceType       @default(computer)
   brand            String?
   model            String?
   deviceSerial     String?
@@ -248,11 +270,11 @@ model DeviceProfile {
   operatingSystem  String?
   osVersion        String?
   osInstallDate    DateTime?
-  source           String     @default("manual")
+  source           String           @default("manual")
   sourceObservedAt DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  asset            Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  asset            Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   components       AssetComponent[]
 
   @@index([deviceType])
@@ -269,6 +291,7 @@ model AssetComponent {
   serialNumber     String?
   capacity         String?
   storageKind      String?
+  propertyTag      String?
   source           String         @default("manual")
   sourceObservedAt DateTime?
   createdAt        DateTime       @default(now())
@@ -297,19 +320,19 @@ model InventoryObservation {
 }
 
 model ComputerIntakeDraft {
-  id          String      @id @default(cuid())
-  createdById String
-  branchId    String?
-  status      DraftStatus @default(draft)
-  data        Json
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  submittedAt DateTime?
-  submittedAssetId String?
-  submitIdempotencyKey String? @unique
-  submitPayloadHash String?
-  createdBy   SystemUser  @relation(fields: [createdById], references: [id])
-  branch      Branch?     @relation(fields: [branchId], references: [id])
+  id                   String      @id @default(cuid())
+  createdById          String
+  branchId             String?
+  status               DraftStatus @default(draft)
+  data                 Json
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  submittedAt          DateTime?
+  submittedAssetId     String?
+  submitIdempotencyKey String?     @unique
+  submitPayloadHash    String?
+  createdBy            SystemUser  @relation(fields: [createdById], references: [id])
+  branch               Branch?     @relation(fields: [branchId], references: [id])
 
   @@index([createdById, status])
   @@index([branchId, status])
@@ -395,22 +418,22 @@ model InterfaceVlanAssignment {
 }
 
 model NetworkPort {
-  id                     String            @id @default(cuid())
+  id                     String           @id @default(cuid())
   assetId                String
   portNumber             String
   portLabel              String?
   medium                 String?
   speedMbps              Int?
   poeCapability          String?
-  adminStatus            PortStatus        @default(unknown)
-  operationalStatus      PortStatus        @default(unknown)
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  adminStatus            PortStatus       @default(unknown)
+  operationalStatus      PortStatus       @default(unknown)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
   idempotencyKey         String?
   idempotencyPayloadHash String?
-  asset                  Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  fromConnections        PortConnection[]  @relation("FromPort")
-  toConnections          PortConnection[]  @relation("ToPort")
+  asset                  Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fromConnections        PortConnection[] @relation("FromPort")
+  toConnections          PortConnection[] @relation("ToPort")
 
   @@unique([assetId, portNumber])
   @@unique([idempotencyKey])
@@ -436,6 +459,31 @@ model PortConnection {
   @@unique([idempotencyKey])
   @@index([branchId, effectiveFrom])
   @@index([fromPortId, effectiveTo])
+}
+
+// Optional device credentials for a network asset (switch/AP/router logins,
+// SNMP communities, VPN pre-shared keys, Wi-Fi passwords, API keys, recovery
+// codes). All secret values are encrypted (AES-256-GCM) as a single JSON blob
+// before storage; the has* flags let the UI show what's populated without
+// decrypting. Decryption is gated to super_admin via a dedicated reveal route.
+model NetworkDeviceCredential {
+  id               String      @id @default(cuid())
+  assetId          String      @unique
+  ciphertext       String
+  iv               String
+  tag              String
+  hasUsername      Boolean     @default(false)
+  hasPassword      Boolean     @default(false)
+  hasSnmpCommunity Boolean     @default(false)
+  hasVpnKey        Boolean     @default(false)
+  hasWifiPassword  Boolean     @default(false)
+  hasApiKey        Boolean     @default(false)
+  hasRecoveryCode  Boolean     @default(false)
+  updatedById      String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  asset            Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  updatedBy        SystemUser? @relation("NetworkDeviceCredentialUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 enum IpAddressFamily {
@@ -477,6 +525,23 @@ enum DeviceType {
 enum ComponentType {
   ram
   storage
+  monitor
+  keyboard
+  mouse
+  speaker
+  webcam
+  microphone
+  printer
+  ups
+  avr
+  clicker
+  projector
+  tv
+  signal_booster
+  flash_drive
+  external_hdd
+  hdd_ssd_docking_station
+  nvme_docking_station
 }
 
 enum ObservationStatus {
@@ -493,7 +558,7 @@ enum DraftStatus {
 }
 
 model HardwareScan {
-  id                String              @id @default(cuid())
+  id                String                   @id @default(cuid())
   assetId           String
   submittedById     String
   fileName          String
@@ -505,10 +570,10 @@ model HardwareScan {
   retentionUntil    DateTime?
   purgedAt          DateTime?
   parsedSpecs       Json
-  isBaseline        Boolean             @default(false)
+  isBaseline        Boolean                  @default(false)
   comparisonResult  Json?
   overallStatus     HwComparisonStatus?
-  status            HardwareScanStatus  @default(pending)
+  status            HardwareScanStatus       @default(pending)
   reviewedById      String?
   reviewedAt        DateTime?
   parserVersion     String?
@@ -516,10 +581,10 @@ model HardwareScan {
   contentSha256     String?
   idempotencyKey    String?
   reviewNotes       String?
-  createdAt         DateTime            @default(now())
-  asset             Asset               @relation(fields: [assetId], references: [id])
-  submittedBy       SystemUser          @relation("HardwareScanSubmitter", fields: [submittedById], references: [id])
-  reviewedBy        SystemUser?         @relation("HardwareScanReviewer", fields: [reviewedById], references: [id])
+  createdAt         DateTime                 @default(now())
+  asset             Asset                    @relation(fields: [assetId], references: [id])
+  submittedBy       SystemUser               @relation("HardwareScanSubmitter", fields: [submittedById], references: [id])
+  reviewedBy        SystemUser?              @relation("HardwareScanReviewer", fields: [reviewedById], references: [id])
   proposals         InventoryFieldProposal[]
 
   @@unique([assetId, idempotencyKey])
@@ -719,22 +784,22 @@ enum AssignmentStatus {
 }
 
 model StockItem {
-  id            String             @id @default(cuid())
-  sku           String             @unique
-  idempotencyKey String              @unique
+  id                 String             @id @default(cuid())
+  sku                String             @unique
+  idempotencyKey     String             @unique
   requestFingerprint String
-  name          String
-  category      String
-  unitOfMeasure String
-  description   String?
-  isSerialized  Boolean            @default(false)
-  active        Boolean            @default(true)
-  archivedAt    DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  movements     StockMovement[]
-  policies      StockLevelPolicy[]
-  countLines    StockCountLine[]
+  name               String
+  category           String
+  unitOfMeasure      String
+  description        String?
+  isSerialized       Boolean            @default(false)
+  active             Boolean            @default(true)
+  archivedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  movements          StockMovement[]
+  policies           StockLevelPolicy[]
+  countLines         StockCountLine[]
 }
 
 model StockLocation {
@@ -755,27 +820,27 @@ model StockLocation {
 }
 
 model StockMovement {
-  id                String            @id @default(cuid())
-  stockItemId       String
-  movementType      StockMovementType
-  quantity          Decimal           @db.Decimal(18, 3)
-  reason            String?
-  referenceType     String?
-  referenceId       String?
-  idempotencyKey    String            @unique
+  id                 String             @id @default(cuid())
+  stockItemId        String
+  movementType       StockMovementType
+  quantity           Decimal            @db.Decimal(18, 3)
+  reason             String?
+  referenceType      String?
+  referenceId        String?
+  idempotencyKey     String             @unique
   requestFingerprint String
-  performedById     String
-  approvedById      String?
-  approvedAt        DateTime?
-  relatedEmployeeId String?
-  relatedAssetId    String?
-  createdAt         DateTime          @default(now())
-  stockItem         StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
-  entries           StockLedgerEntry[]
-  performedBy       SystemUser        @relation("StockMovementPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
-  approvedBy        SystemUser?       @relation("StockMovementApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  relatedEmployee   Employee?         @relation(fields: [relatedEmployeeId], references: [id], onDelete: SetNull)
-  relatedAsset      Asset?            @relation(fields: [relatedAssetId], references: [id], onDelete: SetNull)
+  performedById      String
+  approvedById       String?
+  approvedAt         DateTime?
+  relatedEmployeeId  String?
+  relatedAssetId     String?
+  createdAt          DateTime           @default(now())
+  stockItem          StockItem          @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  entries            StockLedgerEntry[]
+  performedBy        SystemUser         @relation("StockMovementPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  approvedBy         SystemUser?        @relation("StockMovementApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  relatedEmployee    Employee?          @relation(fields: [relatedEmployeeId], references: [id], onDelete: SetNull)
+  relatedAsset       Asset?             @relation(fields: [relatedAssetId], references: [id], onDelete: SetNull)
 
   @@index([stockItemId, createdAt])
 }
@@ -1030,16 +1095,16 @@ model CameraChannelAssignment {
 }
 
 model SecretReference {
-  id           String                 @id @default(cuid())
+  id           String                      @id @default(cuid())
   provider     String
   referenceId  String
   displayLabel String?
   system       String?
   ownerTeam    String?
   rotationAt   DateTime?
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
-  assets       AssetSecretReference[] @relation("SecretReferenceLinks")
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+  assets       AssetSecretReference[]      @relation("SecretReferenceLinks")
   circuits     IspCircuitSecretReference[]
 
   @@unique([provider, referenceId])
@@ -1073,6 +1138,66 @@ enum RecorderType {
   dvr
   hybrid
   other
+}
+
+// --- Access Point / Switch inventory ---
+// Metadata only — IP/subnet/gateway/DNS reuse NetworkInterface +
+// IpAddressObservation, VLAN membership reuses InterfaceVlanAssignment,
+// physical ports reuse NetworkPort, and credentials reuse SecretReference
+// via Asset.secretReferences. These profiles hold only the identity fields
+// that don't already have a generic home elsewhere.
+
+model AccessPointProfile {
+  id                     String   @id @default(cuid())
+  assetId                String   @unique
+  physicalLocation       String
+  notes                  String?
+  idempotencyKey         String?  @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  asset                  Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([physicalLocation])
+}
+
+model SwitchProfile {
+  id                     String     @id @default(cuid())
+  assetId                String     @unique
+  switchType             SwitchType @default(unmanaged)
+  physicalLocation       String
+  portCount              Int?
+  notes                  String?
+  idempotencyKey         String?    @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  asset                  Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([physicalLocation])
+}
+
+enum SwitchType {
+  managed
+  unmanaged
+}
+
+// --- Phone inventory ---
+// Company vs BYOD reuses Asset.ownership (company/personal) instead of a
+// second type field. Serial number, IMEI, and property tag already live on
+// Asset. Only brand/model need a category-specific home.
+
+model PhoneProfile {
+  id                     String   @id @default(cuid())
+  assetId                String   @unique
+  brand                  String?
+  model                  String?
+  notes                  String?
+  idempotencyKey         String?  @unique
+  idempotencyPayloadHash String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  asset                  Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 }
 
 // --- Phase 5: Servers, firewall, and ISP circuit inventory ---

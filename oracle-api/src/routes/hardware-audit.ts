@@ -5,6 +5,7 @@ import { requireAuth, requirePermission, requireSuperAdmin, AuthRequest } from "
 import { prisma } from "../lib/prisma";
 import { Prisma, ProposalState } from "../generated/prisma/client";
 import { logActivity } from "../lib/activity";
+import { broadcastChange } from "../lib/ws";
 import { parseBelarc } from "../lib/belarc/parseBelarc";
 import { compareSpecs } from "../lib/belarc/compare";
 import { NotABelarcReportError, type ParsedSpecs } from "../lib/belarc/types";
@@ -757,6 +758,8 @@ router.post(
         });
         return updated;
       });
+      const purgedAsset = scan.assetId ? await prisma.asset.findUnique({ where: { id: scan.assetId }, select: { branchId: true } }) : null;
+      broadcastChange({ entity: "HardwareScan", action: "hardware_scan_evidence_purged", entityId: scan.id, branchId: purgedAsset?.branchId ?? null });
       res.json({ purged: result.count === 1, scanId: scan.id });
     } catch (e) {
       if (e instanceof Error && e.message === "PURGE_CONFLICT") { res.status(409).json({ error: "Evidence was already purged or changed." }); return; }
@@ -879,5 +882,95 @@ router.put(
     }
   }
 );
+
+// ── Manual specs (non-Belarc categories) ────────────────────────────────────
+// Belarc only reports on Windows computers, so NVR/printer/peripheral/etc.
+// assets have no scan path. This reuses the exact same HardwareScan +
+// compareSpecs() + isBaseline machinery as a Belarc scan — a manual submit is
+// just a synthetic single-section ParsedSpecs instead of a parsed HTML file.
+// That means history, baseline compare, and "accept as baseline" all come for
+// free from the routes already defined above (/scans, /baseline/:assetId,
+// PUT /scans/:scanId/baseline).
+type ManualSpecRow = { label: string; value: string };
+
+function slugify(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field";
+}
+
+function toManualParsedSpecs(rows: ManualSpecRow[]): ParsedSpecs {
+  const seen = new Map<string, number>();
+  const fields = rows.map((r) => {
+    const base = slugify(r.label);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    const key = `manual.${count ? `${base}_${count}` : base}`;
+    return { key, label: r.label, value: r.value, tier: "hard" as const };
+  });
+  return {
+    version: 1,
+    sections: { manual: { key: "manual", name: "Manual entry", fields } },
+    meta: { missingSections: [] },
+  };
+}
+
+function fromManualParsedSpecs(specs: ParsedSpecs | null | undefined): ManualSpecRow[] {
+  return (specs?.sections.manual?.fields ?? []).map((f) => ({ label: f.label, value: f.value }));
+}
+
+// GET /api/hardware-audit/manual-specs/:assetId/latest — prefill for the form
+// with whatever was most recently submitted for this asset (any source).
+router.get("/manual-specs/:assetId/latest", requireAuth, requirePermission("view_inventory"), async (req: AuthRequest, res: Response) => {
+  const scope = await scopedAsset(req, req.params.assetId);
+  if (!scope.asset) { res.status(404).json({ error: "Asset not found." }); return; }
+  if (!scope.allowed) { res.status(403).json({ error: "Asset is outside your scope." }); return; }
+  const latest = await prisma.hardwareScan.findFirst({
+    where: { assetId: req.params.assetId, sourceProduct: "Manual Entry" },
+    orderBy: { createdAt: "desc" },
+    select: { parsedSpecs: true, createdAt: true },
+  });
+  res.json({ specs: fromManualParsedSpecs(latest?.parsedSpecs as unknown as ParsedSpecs), submittedAt: latest?.createdAt ?? null });
+});
+
+// POST /api/hardware-audit/manual-specs/:assetId/scan — submit a new manual
+// entry as a HardwareScan row, compared against the asset's current baseline
+// (if any) exactly like a Belarc scan submission.
+router.post("/manual-specs/:assetId/scan", requireAuth, requirePermission("edit_inventory"), async (req: AuthRequest, res: Response) => {
+  const scope = await scopedAsset(req, req.params.assetId);
+  if (!scope.asset) { res.status(404).json({ error: "Asset not found." }); return; }
+  if (!scope.allowed) { res.status(403).json({ error: "Asset is outside your scope." }); return; }
+  const body = req.body as { specs?: unknown };
+  if (!Array.isArray(body.specs)) { res.status(400).json({ error: "specs must be an array of { label, value }." }); return; }
+  const rows: ManualSpecRow[] = (body.specs as unknown[])
+    .map((r) => (r && typeof r === "object" ? { label: String((r as ManualSpecRow).label ?? "").trim(), value: String((r as ManualSpecRow).value ?? "").trim() } : null))
+    .filter((r): r is ManualSpecRow => Boolean(r && r.label))
+    .slice(0, 50);
+  if (rows.length === 0) { res.status(400).json({ error: "At least one field with a label is required." }); return; }
+
+  const parsedSpecs = toManualParsedSpecs(rows);
+  const baseline = await prisma.hardwareScan.findFirst({
+    where: { assetId: req.params.assetId, isBaseline: true },
+    select: { id: true, parsedSpecs: true },
+  });
+  const comparison = baseline ? compareSpecs(baseline.parsedSpecs as unknown as ParsedSpecs, parsedSpecs) : null;
+
+  const scan = await prisma.hardwareScan.create({
+    data: {
+      assetId: req.params.assetId,
+      submittedById: req.user!.id,
+      fileName: "Manual entry",
+      rawHtml: "",
+      parsedSpecs: JSON.parse(JSON.stringify(parsedSpecs)),
+      comparisonResult: comparison ? JSON.parse(JSON.stringify(comparison)) : undefined,
+      overallStatus: comparison?.overallStatus ?? null,
+      parserVersion: "manual-v1",
+      sourceProduct: "Manual Entry",
+      idempotencyKey: crypto.randomUUID(),
+    },
+    select: { ...scanSummarySelect, parsedSpecs: true, comparisonResult: true },
+  });
+
+  await logActivity({ userId: req.user!.id, action: "manual_specs_submitted", entity: "Asset", entityId: req.params.assetId, metadata: { scanId: scan.id, fieldCount: rows.length, overallStatus: comparison?.overallStatus ?? null } });
+  res.status(201).json(scan);
+});
 
 export default router;

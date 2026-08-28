@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 import { hasValidEmployeeResolution } from "../lib/department-management";
+import { broadcastChange } from "../lib/ws";
 
 const router = Router();
 router.use(requireAuth);
@@ -48,6 +49,7 @@ router.post("/", requirePermission("manage_users"), async (req: AuthRequest, res
     await tx.activityLog.create({ data: { userId: req.user?.id, action: "DEPARTMENT_CREATED", entity: "Department", entityId: created.id, metadata: { name: created.name, branchId } } });
     return created;
   });
+  broadcastChange({ entity: "Department", action: "DEPARTMENT_CREATED", entityId: department.id, branchId });
   res.status(201).json(department);
   } catch (error) { departmentError(res, error); }
 });
@@ -114,6 +116,7 @@ router.patch("/:id", requirePermission("manage_users"), async (req: AuthRequest,
         await tx.activityLog.create({ data: { userId: req.user?.id, action: "DEPARTMENT_ARCHIVED", entity: "Department", entityId: result.id, metadata: { name: result.name, resolution: resolution ?? "none", targetDepartmentId: targetDepartmentId ?? null, employeeCount: currentEmployees } } });
         return result;
       });
+      broadcastChange({ entity: "Department", action: "DEPARTMENT_ARCHIVED", entityId: updated.id, branchId: existing.branchId });
       res.json(updated); return;
     }
   }
@@ -123,6 +126,7 @@ router.patch("/:id", requirePermission("manage_users"), async (req: AuthRequest,
     await tx.activityLog.create({ data: { userId: req.user?.id, action: data.archivedAt === null ? "DEPARTMENT_UNARCHIVED" : data.archivedAt ? "DEPARTMENT_ARCHIVED" : "DEPARTMENT_RENAMED", entity: "Department", entityId: result.id, metadata: { before: existing.name, name: result.name } } });
     return result;
   });
+  broadcastChange({ entity: "Department", action: data.archivedAt === null ? "DEPARTMENT_UNARCHIVED" : data.archivedAt ? "DEPARTMENT_ARCHIVED" : "DEPARTMENT_RENAMED", entityId: updated.id, branchId: existing.branchId });
   res.json(updated);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Department changed; retry.";
@@ -164,6 +168,7 @@ router.delete("/:id", requirePermission("manage_users"), async (req: AuthRequest
     if (message.includes("stale") || message.includes("no longer")) { res.status(409).json({ error: message }); return; }
     departmentError(res, error); return;
   }
+  broadcastChange({ entity: "Department", action: "DEPARTMENT_DELETED", entityId: dept.id, branchId: dept.branchId });
   res.json({ success: true });
   } catch (error) {
     departmentError(res, error);

@@ -5,7 +5,6 @@ import { requireAuth, requirePermission, requireSuperAdmin, AuthRequest } from "
 import { logActivity } from "../lib/activity";
 import { verifyOtp } from "../lib/otp";
 import { validateCorporateEmail, normaliseEmail } from "../lib/email";
-import { generateTempPassword, sendOnboardingEmail } from "../lib/mailer";
 
 const router = Router();
 router.use(requireAuth);
@@ -33,14 +32,18 @@ router.get("/", requirePermission("manage_users"), async (_req, res: Response) =
 
 // POST /api/users
 router.post("/", requirePermission("manage_users"), async (req: AuthRequest, res: Response) => {
-  const { name, email, position, phone, roleId, branchId } =
+  const { name, email, password, position, phone, roleId, branchId } =
     req.body as {
-      name?: string; email?: string;
+      name?: string; email?: string; password?: string;
       position?: string | null; phone?: string | null;
       roleId?: string | null; branchId?: string | null;
     };
   if (!name?.trim() || !email?.trim()) {
     res.status(400).json({ error: "Name and email are required." });
+    return;
+  }
+  if (!password || password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters." });
     return;
   }
 
@@ -60,8 +63,7 @@ router.post("/", requirePermission("manage_users"), async (req: AuthRequest, res
   const existing = await prisma.systemUser.findUnique({ where: { email: normEmail } });
   if (existing) { res.status(400).json({ error: "Email already in use." }); return; }
 
-  const tempPassword = generateTempPassword();
-  const hashed = await bcrypt.hash(tempPassword, 10);
+  const hashed = await bcrypt.hash(password, 10);
   const user = await prisma.systemUser.create({
     data: {
       name: name.trim(),
@@ -71,14 +73,11 @@ router.post("/", requirePermission("manage_users"), async (req: AuthRequest, res
       phone: phone ?? null,
       roleId: roleId ?? null,
       branchId: branchId ?? null,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
     select: userSelect,
   });
   await logActivity({ userId: req.user!.id, action: "create", entity: "User", entityId: user.id, metadata: { name: user.name, email: user.email } });
-
-  sendOnboardingEmail({ to: user.email, name: user.name, tempPassword })
-    .catch(err => console.error("[Mailer] onboarding email failed:", err));
 
   res.status(201).json(user);
 });

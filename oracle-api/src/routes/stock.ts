@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { AuthRequest, requireAuth, requirePermission } from "../middleware/auth";
+import { broadcastChange } from "../lib/ws";
 
 const router = Router(); const featureKey = "stock.tools.v1";
 const enabled = async () => { if (process.env.STOCK_TOOLS_ENABLED !== "true") return false; const f = await prisma.featureRollout.findUnique({ where: { key: featureKey } }).catch(() => null); return Boolean(f?.enabledGlobally && f.status === "enabled"); };
@@ -18,7 +19,47 @@ router.use("/movements", async (req: AuthRequest, res, next) => { if (req.method
 router.use("/locations", async (req: AuthRequest, res, next) => { if (req.method !== "POST") return next(); const b = req.body as Record<string, unknown>; const account = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } }); if (account?.role?.name.toLowerCase() !== "super_admin" && b.branchId !== account?.branchId) return res.status(403).json({ error: "Location branch is outside your scope.", code: "STOCK_BRANCH_FORBIDDEN" }); next(); });
 router.use("/branches/:branchId/summary", async (req: AuthRequest, res, next) => { const account = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } }); if (account?.role?.name.toLowerCase() !== "super_admin" && account?.branchId !== req.params.branchId) return res.status(403).json({ error: "Branch summary is outside your scope.", code: "STOCK_BRANCH_FORBIDDEN" }); next(); });
 router.use("/count-sessions/:id/approve", async (req: AuthRequest, res, next) => { if (req.method !== "POST") return next(); const session = await prisma.stockCountSession.findUnique({ where: { id: req.params.id }, select: { locationId: true, expectedUpdatedAt: true } }); const expected = typeof req.body?.expectedUpdatedAt === "string" ? new Date(req.body.expectedUpdatedAt) : null; const key = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : ""; if (!session || !expected || Number.isNaN(expected.getTime()) || !key) return res.status(400).json({ error: "expectedUpdatedAt and Idempotency-Key header are required.", code: "COUNT_APPROVAL_PRECONDITION" }); const scope = await scopedLocation(req, session.locationId); if (!scope.allowed) return res.status(403).json({ error: "Count is outside your branch scope.", code: "STOCK_LOCATION_FORBIDDEN" }); if (expected.getTime() !== session.expectedUpdatedAt.getTime()) return res.status(409).json({ error: "Count changed since it was loaded.", code: "STALE_WRITE" }); next(); });
-router.post("/items", requirePermission("manage_stock"), async (req: AuthRequest, res) => { if (!(await enabled())) return gate(res); const b = req.body as Record<string, unknown>; const key = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : ""; const bad = unknown(b, ["sku", "name", "category", "unitOfMeasure", "description", "isSerialized"]); if (!key || bad.length || rejectSecret(b) || typeof b.sku !== "string" || typeof b.name !== "string" || typeof b.category !== "string" || typeof b.unitOfMeasure !== "string") return res.status(400).json({ error: "Valid stock item fields and Idempotency-Key are required; secrets are rejected.", code: "INVALID_STOCK_ITEM", fieldErrors: bad }); const requestFingerprint = JSON.stringify({ sku: b.sku.trim().toUpperCase(), name: b.name.trim(), category: b.category.trim(), unitOfMeasure: b.unitOfMeasure.trim(), description: typeof b.description === "string" ? b.description.trim() : null, isSerialized: b.isSerialized === true }); const existing = await prisma.stockItem.findUnique({ where: { idempotencyKey: key } }); if (existing) { if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ error: "Idempotency-Key was already used for different content.", code: "IDEMPOTENCY_KEY_REUSED" }); return res.json(existing); } try { const item = await prisma.stockItem.create({ data: { sku: b.sku.trim().toUpperCase(), name: b.name.trim(), category: b.category.trim(), unitOfMeasure: b.unitOfMeasure.trim(), description: typeof b.description === "string" ? b.description.trim() : null, isSerialized: b.isSerialized === true, idempotencyKey: key, requestFingerprint } }); return res.status(201).json(item); } catch { return res.status(409).json({ error: "SKU already exists.", code: "DUPLICATE_SKU" }); } });
+const skuPrefix = (category: string) => (category.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 4) || "STK");
+async function nextSku(category: string): Promise<string> {
+  const prefix = skuPrefix(category);
+  const count = await prisma.stockItem.count({ where: { category } });
+  return `${prefix}-${String(count + 1).padStart(4, "0")}`;
+}
+
+router.post("/items", requirePermission("manage_stock"), async (req: AuthRequest, res) => {
+  if (!(await enabled())) return gate(res);
+  const b = req.body as Record<string, unknown>;
+  const key = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : "";
+  const bad = unknown(b, ["sku", "name", "category", "unitOfMeasure", "description", "isSerialized"]);
+  if (!key || bad.length || rejectSecret(b) || typeof b.name !== "string" || typeof b.category !== "string" || typeof b.unitOfMeasure !== "string" || (b.sku !== undefined && typeof b.sku !== "string")) {
+    return res.status(400).json({ error: "Valid stock item fields and Idempotency-Key are required; secrets are rejected.", code: "INVALID_STOCK_ITEM", fieldErrors: bad });
+  }
+  const category = b.category.trim();
+  const name = b.name.trim();
+  const unitOfMeasure = b.unitOfMeasure.trim();
+  const description = typeof b.description === "string" ? b.description.trim() : null;
+  const isSerialized = b.isSerialized === true;
+  const manualSku = typeof b.sku === "string" && b.sku.trim() ? b.sku.trim().toUpperCase() : null;
+
+  const requestFingerprint = JSON.stringify({ name, category, unitOfMeasure, description, isSerialized });
+  const existing = await prisma.stockItem.findUnique({ where: { idempotencyKey: key } });
+  if (existing) {
+    if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ error: "Idempotency-Key was already used for different content.", code: "IDEMPOTENCY_KEY_REUSED" });
+    return res.json(existing);
+  }
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const sku = manualSku ?? await nextSku(category);
+    try {
+      const item = await prisma.stockItem.create({ data: { sku, name, category, unitOfMeasure, description, isSerialized, idempotencyKey: key, requestFingerprint } });
+      return res.status(201).json(item);
+    } catch {
+      if (manualSku) return res.status(409).json({ error: "SKU already exists.", code: "DUPLICATE_SKU" });
+      // auto-generated SKU collided (concurrent create) — retry with the next sequence number
+    }
+  }
+  return res.status(409).json({ error: "Could not generate a unique SKU, please try again.", code: "SKU_GENERATION_FAILED" });
+});
 router.get("/items", requirePermission("view_stock"), async (req: AuthRequest, res) => {
   if (!(await enabled())) return gate(res);
   const q = typeof req.query.q === "string" ? req.query.q : undefined;
@@ -86,6 +127,8 @@ router.post("/movements", requirePermission("manage_stock"), async (req: AuthReq
       await tx.activityLog.create({ data: { userId: req.user!.id, action: "stock_movement_created", entity: "StockMovement", entityId: movement.id, metadata: { source: "stock_manual", movementType, locationId, quantity, idempotencyKey: key } } });
       return movement;
     }, { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 });
+    const movedLocation = await prisma.stockLocation.findUnique({ where: { id: locationId }, select: { branchId: true } });
+    broadcastChange({ entity: "StockMovement", action: "stock_movement_created", entityId: result.id, branchId: movedLocation?.branchId ?? null });
     return res.status(201).json({ movement: result, balance: await balance(stockItemId, locationId) });
   } catch (error) {
     if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_REUSED") return res.status(409).json({ error: "Idempotency-Key was already used for different content.", code: "IDEMPOTENCY_KEY_REUSED" });
@@ -149,6 +192,7 @@ router.post("/count-sessions/:id/approve", requirePermission("approve_stock_adju
       await tx.activityLog.create({ data: { userId: req.user!.id, action: "stock_count_approved", entity: "StockCountSession", entityId: session.id, metadata: { source: "stock_manual", locationId: session.locationId, lineCount: session.lines.length, idempotencyKey: key } } });
       return tx.stockCountSession.findUniqueOrThrow({ where: { id: session.id } });
     }, { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 });
+    broadcastChange({ entity: "StockCountSession", action: "stock_count_approved", entityId: session.id, branchId: session.location.branchId });
     return res.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "STALE_WRITE") return res.status(409).json({ error: "Count changed since it was loaded.", code: "STALE_WRITE" });
@@ -181,6 +225,10 @@ router.post("/movements/transfer", requirePermission("manage_stock"), async (req
       await tx.stockLedgerEntry.createMany({ data: [{ movementId: created.id, locationId: sourceLocationId, quantityDelta: -quantity }, { movementId: created.id, locationId: destinationLocationId, quantityDelta: quantity }] });
       await tx.activityLog.create({ data: { userId: req.user!.id, action: "stock_transfer_created", entity: "StockMovement", entityId: created.id, metadata: { source: "stock_manual", sourceLocationId, destinationLocationId, quantity } } }); return created;
     }, { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 });
+    broadcastChange({ entity: "StockMovement", action: "stock_transfer_created", entityId: movement.id, branchId: source.location?.branchId ?? null });
+    if (destination.location?.branchId && destination.location.branchId !== source.location?.branchId) {
+      broadcastChange({ entity: "StockMovement", action: "stock_transfer_created", entityId: movement.id, branchId: destination.location.branchId });
+    }
     return res.status(201).json({ movement, sourceBalance: await balance(stockItemId, sourceLocationId), destinationBalance: await balance(stockItemId, destinationLocationId) });
   } catch (error) { if (error instanceof Error && error.message === "NEGATIVE_STOCK") return res.status(409).json({ error: "Transfer would create negative stock.", code: "NEGATIVE_STOCK" }); if (error instanceof Error && error.message === "STOCK_ITEM_ARCHIVED") return res.status(409).json({ error: "Stock item is missing or archived.", code: "STOCK_ITEM_ARCHIVED" }); return res.status(409).json({ error: "Transfer conflict.", code: "STOCK_TRANSFER_CONFLICT" }); }
 });

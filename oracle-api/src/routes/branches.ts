@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 import { enabled as stockEnabled, gate as stockGate } from "./stock";
 import { parseBranchCoordinates } from "../lib/branch-coordinates";
+import { logActivity } from "../lib/activity";
 
 const router = Router();
 router.use(requireAuth);
@@ -83,6 +84,7 @@ router.post("/", requirePermission("manage_branches"), async (req: AuthRequest, 
       _count: { select: { assets: true, employees: true } },
     },
   });
+  await logActivity({ userId: req.user!.id, action: "BRANCH_CREATED", entity: "Branch", entityId: branch.id, metadata: { name: branch.name } });
   res.status(201).json(branch);
 });
 
@@ -133,6 +135,7 @@ router.patch("/:id", requirePermission("manage_branches"), async (req: AuthReque
     },
     include: { _count: { select: { assets: true, employees: true } } },
   });
+  await logActivity({ userId: req.user!.id, action: "BRANCH_UPDATED", entity: "Branch", entityId: updated.id, metadata: { name: updated.name } });
   res.json(updated);
 });
 
@@ -144,6 +147,7 @@ router.patch("/:id/archive", requirePermission("manage_branches"), async (req: A
     where: { id: req.params.id },
     data: { archivedAt: new Date() },
   });
+  await logActivity({ userId: req.user!.id, action: "BRANCH_ARCHIVED", entity: "Branch", entityId: updated.id, metadata: { name: updated.name } });
   res.json(updated);
 });
 
@@ -155,6 +159,7 @@ router.patch("/:id/unarchive", requirePermission("manage_branches"), async (req:
     where: { id: req.params.id },
     data: { archivedAt: null },
   });
+  await logActivity({ userId: req.user!.id, action: "BRANCH_UNARCHIVED", entity: "Branch", entityId: updated.id, metadata: { name: updated.name } });
   res.json(updated);
 });
 
@@ -170,6 +175,7 @@ router.delete("/:id", requirePermission("manage_branches"), async (req: AuthRequ
     return;
   }
   await prisma.branch.delete({ where: { id: req.params.id } });
+  await logActivity({ userId: req.user!.id, action: "BRANCH_DELETED", entity: "Branch", entityId: req.params.id, metadata: { name: branch.name } });
   res.status(204).end();
 });
 

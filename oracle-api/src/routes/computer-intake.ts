@@ -27,7 +27,7 @@ export function validateIntake(v: unknown): Record<string, string> {
   if (!record(v)) return { form: "Payload must be an object." };
   const data = v as Intake;
   for (const key of ["name","assetTag","computerName","categoryId","branchId","ownership","serialNumber","condition","status","description","processor","motherboard","operatingSystem","osVersion","deviceType","employeeId","brand","model"]) if (data[key] !== undefined && typeof data[key] !== "string") errors[key] = "Must be a string.";
-  for (const key of ["purchaseDate","warrantyExpiry","osInstallDate"]) if (data[key] !== undefined && (typeof data[key] !== "string" || Number.isNaN(Date.parse(String(data[key]))))) errors[key] = "Must be a valid date.";
+  for (const key of ["purchaseDate","warrantyExpiry","osInstallDate"]) if (data[key] !== undefined && data[key] !== null && data[key] !== "" && (typeof data[key] !== "string" || Number.isNaN(Date.parse(String(data[key]))))) errors[key] = "Must be a valid date.";
   if (data.ownership !== undefined && data.ownership !== "company") errors.ownership = "Phase 1 computer intake supports company-owned devices only.";
   for (const [key, allowed] of Object.entries({ condition: ["usable","for_repair","for_disposal"], status: ["active","lost","stolen"], deviceType: ["computer","laptop"] })) if (data[key] !== undefined && !allowed.includes(String(data[key]))) errors[key] = `Invalid ${key}.`;
   if (data.components !== undefined && (!Array.isArray(data.components) || data.components.length > 64)) errors.components = "Must contain at most 64 component rows.";
@@ -39,7 +39,11 @@ export function validateIntake(v: unknown): Record<string, string> {
   return errors;
 }
 function dates(data: Intake, key: string) { return data[key] ? new Date(data[key]) : null; }
-function normalize(data: Intake): Intake { return { ...data, name: typeof data.name === "string" ? data.name.trim() : data.name, assetTag: typeof data.assetTag === "string" ? data.assetTag.trim() || undefined : data.assetTag, components: Array.isArray(data.components) ? data.components.map((c: Intake) => ({ ...c, slotOrBay: c.slotOrBay?.trim() || undefined, brand: c.brand?.trim() || undefined, model: c.model?.trim() || undefined, serialNumber: c.serialNumber?.trim() || undefined, capacity: c.capacity?.trim() || undefined, storageKind: c.storageKind?.trim().toLowerCase() || undefined })) : [] }; }
+function normalize(data: Intake): Intake {
+  const cleaned: Intake = { ...data, name: typeof data.name === "string" ? data.name.trim() : data.name, assetTag: typeof data.assetTag === "string" ? data.assetTag.trim() || undefined : data.assetTag, components: Array.isArray(data.components) ? data.components.map((c: Intake) => ({ ...c, slotOrBay: c.slotOrBay?.trim() || undefined, brand: c.brand?.trim() || undefined, model: c.model?.trim() || undefined, serialNumber: c.serialNumber?.trim() || undefined, capacity: c.capacity?.trim() || undefined, storageKind: c.storageKind?.trim().toLowerCase() || undefined })) : [] };
+  for (const key of ["purchaseDate", "warrantyExpiry", "osInstallDate"]) if (cleaned[key] === null || (typeof cleaned[key] === "string" && cleaned[key].trim() === "")) cleaned[key] = undefined;
+  return cleaned;
+}
 function changedFieldNames(before: unknown, after: Intake) { const oldValue = record(before) ? before : {}; return Object.keys(after).filter((key) => key !== "components" ? JSON.stringify((oldValue as Intake)[key]) !== JSON.stringify(after[key]) : JSON.stringify((oldValue as Intake).components ?? []) !== JSON.stringify(after.components ?? [])); }
 async function gate(req: AuthRequest, res: Response, next: NextFunction) {
   if (process.env.FEATURE_COMPUTER_MANUAL_INTAKE_V1?.trim().toLowerCase() !== "true") { res.status(404).json({ error: "Computer manual intake is disabled." }); return; }
@@ -67,6 +71,14 @@ function idempotency(req: AuthRequest) { const value = req.header("Idempotency-K
 function payloadHash(value: unknown) { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 export function submitPayload(value: unknown): Intake { if (!record(value)) return {}; const { expectedUpdatedAt: _expected, ifMatch: _ifMatch, idempotencyKey: _idempotencyKey, ...data } = value as Intake; return data; }
 async function normalizedAssetTagExists(tag: string) { const rows = await prisma.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Asset" WHERE "assetTag" IS NOT NULL AND btrim("assetTag") <> '' AND lower(btrim("assetTag")) = lower(btrim(${tag})) LIMIT 1`; return rows.length > 0; }
+async function nextAssetTag(): Promise<string> {
+  const total = await prisma.asset.count();
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const tag = `AT-${String(total + 1 + attempt).padStart(5, "0")}`;
+    if (!(await normalizedAssetTagExists(tag))) return tag;
+  }
+  return `AT-${Date.now().toString(36).toUpperCase()}`;
+}
 
 router.use(gate, requirePermission("create_inventory"), role);
 router.get("/lookups", async (req: AuthRequest, res) => {
@@ -118,9 +130,10 @@ router.post("/drafts/:id/submit", async (req: AuthRequest, res) => {
   if (data.categoryId) { const category = await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } }); if (!category || !/desktop|laptop|computer/i.test(category.name)) { res.status(400).json({ error: "Category must be a desktop or laptop computer." }); return; } }
   if (data.employeeId) { const employee = await prisma.employee.findUnique({ where: { id: data.employeeId }, select: { branchId: true, isActive: true } }); if (!employee?.isActive || employee.branchId !== data.branchId) { res.status(400).json({ error: "Employee must belong to the selected branch." }); return; } }
   const duplicateComputerName = Boolean(data.computerName && await prisma.asset.findFirst({ where: { branchId: data.branchId, computerName: { equals: data.computerName.trim(), mode: "insensitive" } }, select: { id: true } }));
+  const assetTag = data.assetTag ?? await nextAssetTag();
   try {
     const asset = await prisma.$transaction(async (tx) => {
-      const created = await tx.asset.create({ data: { name: data.name.trim(), assetTag: data.assetTag ?? null, computerName: data.computerName?.trim() || null, serialNumber: data.serialNumber?.trim() || null, categoryId: data.categoryId ?? null, branchId: data.branchId, ownership: data.ownership ?? "company", condition: data.condition ?? "usable", status: data.status ?? "active", purchaseDate: dates(data, "purchaseDate"), warrantyExpiry: dates(data, "warrantyExpiry"), description: data.description?.trim() || null } });
+      const created = await tx.asset.create({ data: { name: data.name.trim(), assetTag, computerName: data.computerName?.trim() || null, serialNumber: data.serialNumber?.trim() || null, categoryId: data.categoryId ?? null, branchId: data.branchId, ownership: data.ownership ?? "company", condition: data.condition ?? "usable", status: data.status ?? "active", purchaseDate: dates(data, "purchaseDate"), warrantyExpiry: dates(data, "warrantyExpiry"), description: data.description?.trim() || null } });
       const profile = await tx.deviceProfile.create({ data: { assetId: created.id, deviceType: data.deviceType ?? "computer", brand: data.brand?.trim() || null, model: data.model?.trim() || null, deviceSerial: data.serialNumber?.trim() || null, processor: data.processor?.trim() || null, motherboard: data.motherboard?.trim() || null, operatingSystem: data.operatingSystem?.trim() || null, osVersion: data.osVersion?.trim() || null, osInstallDate: dates(data, "osInstallDate") } });
       await tx.assetComponent.createMany({ data: data.components.map((c: Intake) => ({ assetId: created.id, deviceProfileId: profile.id, type: c.type, slotOrBay: c.slotOrBay ?? null, brand: c.brand ?? null, model: c.model ?? null, serialNumber: c.serialNumber ?? null, capacity: c.capacity ?? null, storageKind: c.storageKind ?? null })) });
       if (data.employeeId) await tx.assetAssignment.create({ data: { assetId: created.id, employeeId: data.employeeId, status: "active" } });
