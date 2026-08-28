@@ -6,7 +6,6 @@ import { logActivity } from "../lib/activity";
 import { broadcastChange } from "../lib/ws";
 
 const router = Router();
-const featureKey = "cctv.nvr.v1";
 const forbidden = /password|passwd|pwd|secret|token|credential|username|login|api.?key|private.?key|license.?key|rtsp|onvif|stream(url)?|recovery|config(uration)?/i;
 const hash = (value: unknown) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const safeJson = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint" ? item.toString() : item));
@@ -14,13 +13,10 @@ const intervalsOverlap = (aStart: Date, aEnd: Date | null, bStart: Date, bEnd: D
 const keyOf = (req: AuthRequest) => typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : "";
 const role = async (req: AuthRequest) => prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } });
 const isSuper = (u: { role: { name: string } | null } | null) => u?.role?.name.toLowerCase() === "super_admin";
-const enabled = async (branchId?: string) => {
-  if (process.env.CCTV_NVR_ENABLED !== "true") return false;
-  const feature = await prisma.featureRollout.findUnique({ where: { key: featureKey } }).catch(() => null);
-  if (!feature) return false;
-  const override = branchId ? await prisma.featureRolloutBranch.findUnique({ where: { featureKey_branchId: { featureKey, branchId } } }).catch(() => null) : null;
-  return Boolean(override?.enabled ?? (feature.enabledGlobally && feature.status === "enabled"));
-};
+// CCTV/NVR is a released inventory domain; auth, permissions, and branch scope
+// remain enforced by the route handlers below.
+const enabled = async (_branchId?: string) => true;
+const gate = (_res: import("express").Response): undefined => undefined;
 const rejectSecrets = (value: unknown, path = ""): string | null => {
   if (path && forbidden.test(path)) return path;
   if (typeof value === "string" && (forbidden.test(value) || /:\/\/[^/\s]+:[^@\s]+@/i.test(value))) return path || "value";
@@ -29,7 +25,6 @@ const rejectSecrets = (value: unknown, path = ""): string | null => {
   return null;
 };
 const unknown = (body: Record<string, unknown>, allowed: string[]) => Object.keys(body).filter((k) => !allowed.includes(k));
-const gate = (res: import("express").Response) => res.status(503).json({ error: "CCTV/NVR inventory is disabled.", code: "CCTV_NVR_DISABLED" });
 const scopeAsset = async (req: AuthRequest, assetId: string) => {
   const [u, asset] = await Promise.all([role(req), prisma.asset.findUnique({ where: { id: assetId }, select: { id: true, branchId: true, category: { select: { name: true } } } })]);
   return { u, asset, allowed: Boolean(asset && (isSuper(u) || u?.branchId === asset.branchId)) };
@@ -44,7 +39,6 @@ router.use(requireAuth);
 router.get("/cameras", requirePermission("view_inventory"), async (req: AuthRequest, res) => {
   const u = await role(req); const branchId = typeof req.query.branchId === "string" ? req.query.branchId : undefined;
   if (!isSuper(u) && branchId && branchId !== u?.branchId) return res.status(403).json({ error: "Branch is outside your scope." });
-  if (!(await enabled(branchId ?? u?.branchId ?? undefined))) return gate(res);
   const where = { asset: { branchId: isSuper(u) ? branchId : u?.branchId } };
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const assigned = req.query.assigned === "true" ? true : req.query.assigned === "false" ? false : undefined;
@@ -68,7 +62,7 @@ router.get("/cameras", requirePermission("view_inventory"), async (req: AuthRequ
 router.post("/cameras", requirePermission("manage_infrastructure_assets"), async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>; const allowed = ["assetId", "physicalLocation", "coverageArea", "cameraType", "resolution", "nightVision", "motionDetection", "installationDate", "notes"];
   const bad = unknown(b, allowed); const secret = rejectSecrets(b); if (bad.length || secret) return res.status(400).json({ error: secret ? "Sensitive or credential-like values are not accepted." : "Unknown fields are not accepted.", code: "INVALID_CCTV_PAYLOAD", fieldErrors: bad });
-  const assetId = typeof b.assetId === "string" ? b.assetId : ""; const location = typeof b.physicalLocation === "string" ? b.physicalLocation.trim() : ""; const s = await scopeAsset(req, assetId); if (!s.asset) return res.status(404).json({ error: "Asset not found." }); if (!s.allowed) return res.status(403).json({ error: "Asset is outside your branch scope." }); if (!categoryMatches(s.asset.category?.name, "camera")) return res.status(400).json({ error: "Asset category must be Camera/CCTV.", code: "INVALID_ASSET_CATEGORY" }); if (!(await enabled(s.asset.branchId ?? undefined))) return gate(res); if (!location) return res.status(400).json({ error: "physicalLocation is required.", fieldErrors: ["physicalLocation"] });
+  const assetId = typeof b.assetId === "string" ? b.assetId : ""; const location = typeof b.physicalLocation === "string" ? b.physicalLocation.trim() : ""; const s = await scopeAsset(req, assetId); if (!s.asset) return res.status(404).json({ error: "Asset not found." }); if (!s.allowed) return res.status(403).json({ error: "Asset is outside your branch scope." }); if (!categoryMatches(s.asset.category?.name, "camera")) return res.status(400).json({ error: "Asset category must be Camera/CCTV.", code: "INVALID_ASSET_CATEGORY" }); if (!location) return res.status(400).json({ error: "physicalLocation is required.", fieldErrors: ["physicalLocation"] });
   const key = keyOf(req); if (!key) return res.status(400).json({ error: "Idempotency-Key is required." });
   const data = { assetId, physicalLocation: location, coverageArea: typeof b.coverageArea === "string" ? b.coverageArea.trim() : null, cameraType: (b.cameraType as never) ?? "fixed", resolution: typeof b.resolution === "string" ? b.resolution.trim() : null, nightVision: typeof b.nightVision === "boolean" ? b.nightVision : null, motionDetection: typeof b.motionDetection === "boolean" ? b.motionDetection : null, installationDate: typeof b.installationDate === "string" ? new Date(b.installationDate) : null, notes: typeof b.notes === "string" ? b.notes.trim() : null };
   const dataHash = hash(data); const prior = await prisma.cameraProfile.findUnique({ where: { idempotencyKey: key } }); if (prior) { if (prior.idempotencyPayloadHash !== dataHash) return res.status(409).json({ error: "Idempotency-Key was reused for different data.", code: "IDEMPOTENCY_KEY_REUSED" }); return res.json(prior); }
@@ -79,7 +73,7 @@ router.post("/cameras", requirePermission("manage_infrastructure_assets"), async
 router.post("/recorders", requirePermission("manage_infrastructure_assets"), async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>; const allowed = ["assetId", "recorderType", "channelCapacity", "physicalLocation", "storageCapacityBytes", "retentionDaysTarget", "notes", "channels"];
   const bad = unknown(b, allowed); const secret = rejectSecrets(b); if (bad.length || secret) return res.status(400).json({ error: secret ? "Sensitive or credential-like values are not accepted." : "Unknown fields are not accepted.", code: "INVALID_CCTV_PAYLOAD", fieldErrors: bad });
-  const assetId = typeof b.assetId === "string" ? b.assetId : ""; const location = typeof b.physicalLocation === "string" ? b.physicalLocation.trim() : ""; const capacity = b.channelCapacity; const s = await scopeAsset(req, assetId); if (!s.asset) return res.status(404).json({ error: "Asset not found." }); if (!s.allowed) return res.status(403).json({ error: "Asset is outside your branch scope." }); if (!categoryMatches(s.asset.category?.name, "recorder")) return res.status(400).json({ error: "Asset category must be NVR/DVR/recorder.", code: "INVALID_ASSET_CATEGORY" }); if (!(await enabled(s.asset.branchId ?? undefined))) return gate(res); if (!location || !Number.isInteger(capacity) || Number(capacity) < 1 || Number(capacity) > 10000) return res.status(400).json({ error: "physicalLocation and channelCapacity are required.", fieldErrors: ["physicalLocation", "channelCapacity"] });
+  const assetId = typeof b.assetId === "string" ? b.assetId : ""; const location = typeof b.physicalLocation === "string" ? b.physicalLocation.trim() : ""; const capacity = b.channelCapacity; const s = await scopeAsset(req, assetId); if (!s.asset) return res.status(404).json({ error: "Asset not found." }); if (!s.allowed) return res.status(403).json({ error: "Asset is outside your branch scope." }); if (!categoryMatches(s.asset.category?.name, "recorder")) return res.status(400).json({ error: "Asset category must be NVR/DVR/recorder.", code: "INVALID_ASSET_CATEGORY" }); if (!location || !Number.isInteger(capacity) || Number(capacity) < 1 || Number(capacity) > 10000) return res.status(400).json({ error: "physicalLocation and channelCapacity are required.", fieldErrors: ["physicalLocation", "channelCapacity"] });
   const channels = b.channels === undefined ? [] : b.channels; if (!Array.isArray(channels) || channels.some((c) => !c || typeof c !== "object" || Array.isArray(c) || unknown(c as Record<string, unknown>, ["channelNumber", "label", "enabled"]).length || !Number.isInteger((c as Record<string, unknown>).channelNumber))) return res.status(400).json({ error: "channels must contain valid channel rows.", code: "INVALID_CHANNELS" });
   if (channels.some((c) => Number((c as Record<string, unknown>).channelNumber) < 1 || Number((c as Record<string, unknown>).channelNumber) > Number(capacity))) return res.status(400).json({ error: "Channel number exceeds recorder capacity.", code: "CHANNEL_OUT_OF_RANGE" });
   const key = keyOf(req); if (!key) return res.status(400).json({ error: "Idempotency-Key is required." }); const payload = { ...b, channels }; const prior = await prisma.recorderProfile.findFirst({ where: { assetId }, include: { channels: true } }); if (prior) return res.status(409).json({ error: "A recorder profile already exists for this asset.", code: "DUPLICATE_RECORDER_PROFILE" });
@@ -90,7 +84,6 @@ router.get("/recorders", requirePermission("view_inventory"), async (req: AuthRe
   const u = await role(req);
   const branchId = typeof req.query.branchId === "string" ? req.query.branchId : undefined;
   if (!isSuper(u) && branchId && branchId !== u?.branchId) return res.status(403).json({ error: "Branch is outside your scope." });
-  if (!(await enabled(branchId ?? u?.branchId ?? undefined))) return gate(res);
   const where = { asset: { branchId: isSuper(u) ? branchId : u?.branchId } };
   const q = typeof req.query.q === "string" ? req.query.q.trim() : ""; const page = Math.max(1, Number(req.query.page) || 1); const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
   const recorderWhere = { ...where, ...(q ? { OR: [{ physicalLocation: { contains: q, mode: "insensitive" as const } }, { asset: { name: { contains: q, mode: "insensitive" as const }, branchId: isSuper(u) ? branchId : u?.branchId } }] } : {}) };
@@ -123,7 +116,6 @@ router.get("/recorders/:assetId/channels", requirePermission("view_inventory"), 
   const s = await scopeAsset(req, req.params.assetId);
   if (!s.asset) return res.status(404).json({ error: "Asset not found." });
   if (!s.allowed) return res.status(403).json({ error: "Asset is outside your branch scope." });
-  if (!(await enabled(s.asset.branchId ?? undefined))) return gate(res);
   const recorder = await prisma.recorderProfile.findUnique({
     where: { assetId: req.params.assetId },
     include: {
@@ -146,7 +138,7 @@ router.post("/channel-assignments", requirePermission("manage_infrastructure_ass
   const b = req.body as Record<string, unknown>; const allowed = ["cameraId", "channelId", "validFrom", "validTo", "notes"]; const bad = unknown(b, allowed); const secret = rejectSecrets(b); const key = keyOf(req); if (bad.length || secret) return res.status(400).json({ error: secret ? "Sensitive or credential-like values are not accepted." : "Unknown fields are not accepted.", code: "INVALID_CCTV_PAYLOAD", fieldErrors: bad }); if (!key) return res.status(400).json({ error: "Idempotency-Key is required." });
   const cameraId = typeof b.cameraId === "string" ? b.cameraId : ""; const channelId = typeof b.channelId === "string" ? b.channelId : ""; const from = typeof b.validFrom === "string" ? new Date(b.validFrom) : new Date(); const to = typeof b.validTo === "string" ? new Date(b.validTo) : null; if (!cameraId || !channelId || Number.isNaN(from.getTime()) || (to && (Number.isNaN(to.getTime()) || to <= from))) return res.status(400).json({ error: "cameraId, channelId, and a valid date range are required.", code: "INVALID_DATE_RANGE" });
   const prior = await prisma.cameraChannelAssignment.findUnique({ where: { idempotencyKey: key } }); const payload = { cameraId, channelId, validFrom: from.toISOString(), validTo: to?.toISOString() ?? null, notes: typeof b.notes === "string" ? b.notes.trim() : null }; if (prior) { if (prior.idempotencyPayloadHash !== hash(payload)) return res.status(409).json({ error: "Idempotency-Key was reused for different data.", code: "IDEMPOTENCY_KEY_REUSED" }); return res.json(prior); }
-  const [camera, channel, u] = await Promise.all([prisma.cameraProfile.findUnique({ where: { id: cameraId }, select: { id: true, asset: { select: { branchId: true } } } }), prisma.recorderChannel.findUnique({ where: { id: channelId }, select: { id: true, recorder: { select: { asset: { select: { branchId: true } } } } } }), role(req)]); if (!camera || !channel) return res.status(404).json({ error: "Camera or channel not found." }); if (camera.asset.branchId !== channel.recorder.asset.branchId) return res.status(400).json({ error: "Camera and recorder must share a branch.", code: "CROSS_BRANCH_ASSIGNMENT" }); if (!isSuper(u) && u?.branchId !== camera.asset.branchId) return res.status(403).json({ error: "Assignment is outside your branch scope." }); if (!(await enabled(camera.asset.branchId ?? undefined))) return gate(res);
+  const [camera, channel, u] = await Promise.all([prisma.cameraProfile.findUnique({ where: { id: cameraId }, select: { id: true, asset: { select: { branchId: true } } } }), prisma.recorderChannel.findUnique({ where: { id: channelId }, select: { id: true, recorder: { select: { asset: { select: { branchId: true } } } } } }), role(req)]); if (!camera || !channel) return res.status(404).json({ error: "Camera or channel not found." }); if (camera.asset.branchId !== channel.recorder.asset.branchId) return res.status(400).json({ error: "Camera and recorder must share a branch.", code: "CROSS_BRANCH_ASSIGNMENT" }); if (!isSuper(u) && u?.branchId !== camera.asset.branchId) return res.status(403).json({ error: "Assignment is outside your branch scope." });
   try { const item = await prisma.$transaction(async (tx) => { const conflicts = await tx.cameraChannelAssignment.findFirst({ where: { AND: [{ OR: [{ cameraId }, { channelId }] }, { validFrom: { lt: to ?? new Date("9999-12-31") } }, { OR: [{ validTo: null }, { validTo: { gt: from } }] }] } }); if (conflicts) throw new Error("CONFLICT"); const created = await tx.cameraChannelAssignment.create({ data: { cameraId, channelId, validFrom: from, validTo: to, notes: payload.notes, idempotencyKey: key, idempotencyPayloadHash: hash(payload) } }); await tx.activityLog.create({ data: { userId: req.user!.id, action: "cctv_channel_assigned", entity: "CameraChannelAssignment", entityId: created.id, metadata: { source: "cctv_manual", actorId: req.user!.id, branchId: camera.asset.branchId, idempotencyKey: key, assignment: "redacted" } } }); return created; }, { isolationLevel: "Serializable", maxWait: 5000, timeout: 10000 }); broadcastChange({ entity: "CameraChannelAssignment", action: "cctv_channel_assigned", entityId: item.id, branchId: camera.asset.branchId }); res.status(201).json(item); } catch (error) { if (error instanceof Error && error.message === "CONFLICT") return res.status(409).json({ error: "Camera or channel has an overlapping assignment.", code: "CHANNEL_CONFLICT" }); return res.status(409).json({ error: "Assignment could not be created.", code: "ASSIGNMENT_CONFLICT" }); }
 });
 

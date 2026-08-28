@@ -5,16 +5,13 @@ import { AuthRequest, requireAuth, requirePermission } from "../middleware/auth"
 import { broadcastChange } from "../lib/ws";
 
 const router = Router();
-const featureKey = "network.v1";
 const hash = (value: unknown) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const keyOf = (req: AuthRequest) => typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : "";
 const role = async (req: AuthRequest) => prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } });
 const isSuper = (u: { role: { name: string } | null } | null) => u?.role?.name.toLowerCase() === "super_admin";
-const enabled = async (branchId?: string) => {
-  const feature = await prisma.featureRollout.findUnique({ where: { key: featureKey } }).catch(() => null);
-  const override = feature && branchId ? await prisma.featureRolloutBranch.findUnique({ where: { featureKey_branchId: { featureKey: feature.key, branchId } } }).catch(() => null) : null;
-  return process.env.NETWORK_INFRA_ENABLED === "true" && Boolean(override?.enabled ?? (feature?.enabledGlobally && feature.status === "enabled"));
-};
+// Network inventory is a released domain; auth, permissions, and branch scope
+// remain enforced by the route handlers below.
+const enabled = async (_branchId?: string) => true;
 const gate = (res: import("express").Response) => res.status(503).json({ error: "Network infrastructure is disabled.", code: "NETWORK_DISABLED" });
 const unknownFields = (body: Record<string, unknown>, allowed: string[]) => Object.keys(body).filter((k) => !allowed.includes(k));
 const scopeAsset = async (req: AuthRequest, assetId: string) => {

@@ -6,7 +6,9 @@ import { encryptDeviceCredentials, deviceCredentialKeyConfigured, type DeviceCre
 import { broadcastChange } from "../lib/ws";
 
 const router = Router();
-const featureEnabled = async (branchId?: string) => { const f = await prisma.featureRollout.findUnique({ where: { key: "network.v1" } }).catch(() => null); const override = f && branchId ? await prisma.featureRolloutBranch.findUnique({ where: { featureKey_branchId: { featureKey: f.key, branchId } } }).catch(() => null) : null; return process.env.NETWORK_INFRA_ENABLED === "true" && Boolean(override?.enabled ?? (f?.enabledGlobally && f.status === "enabled")); };
+// Network inventory is a released domain; auth, permissions, and branch scope
+// remain enforced by the route handlers below.
+const featureEnabled = async (_branchId?: string) => true;
 const keyOf = (req: AuthRequest) => typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].trim() : "";
 const branchUser = async (req: AuthRequest) => prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { branchId: true, role: { select: { name: true } } } });
 const superUser = (u: { role: { name: string } | null } | null) => u?.role?.name.toLowerCase() === "super_admin";
