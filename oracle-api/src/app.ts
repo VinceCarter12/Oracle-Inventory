@@ -36,9 +36,7 @@ const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 const productionFrontendOrigins = [
-  "https://oracle-inventory.vercel.app",
-  "https://oracle-inventory-vince-carters-projects.vercel.app",
-  "https://oracle-inventory-git-main-vince-carters-projects.vercel.app",
+  "https://oracle-inventory-delta.vercel.app",
 ];
 const allowedOrigins = new Set([
   ...configuredOrigins,

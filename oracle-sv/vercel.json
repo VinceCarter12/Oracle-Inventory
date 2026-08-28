@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://oracle-inventory-api-vince-carters-projects.vercel.app/gateway/:path*"
+      "destination": "https://oracle-inventory-api-two.vercel.app/gateway/:path*"
     }
   ]
 }
