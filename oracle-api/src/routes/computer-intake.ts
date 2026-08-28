@@ -133,9 +133,17 @@ router.post("/drafts/:id/submit", async (req: AuthRequest, res) => {
       if (claimed.count !== 1) throw Object.assign(new Error("IDEMPOTENCY_CONFLICT"), { code: "IDEMPOTENCY_CONFLICT" });
       await tx.activityLog.create({ data: { userId: req.user!.id, action: "submit", entity: "ComputerIntake", entityId: created.id, metadata: { source: "manual", provenance: "manual-intake-submit", operationReason: "official-record-submitted", branchId: data.branchId, draftId: draft.id, changedFields: ["asset", "deviceProfile", ...(data.components.length ? ["components"] : []), ...(data.employeeId ? ["assignment"] : [])] } } });
       return tx.asset.findUniqueOrThrow({ where: { id: created.id }, include: { deviceProfile: true, components: true, assignments: true } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
     res.status(201).json({ ...asset, warnings: duplicateComputerName ? ["A computer with this network name already exists in this branch; confirm this is a separate device."] : [] });
-  } catch (error) { const code = (error as { code?: string }).code; if (code === "P2002" || code === "IDEMPOTENCY_CONFLICT") { res.status(409).json({ error: code === "IDEMPOTENCY_CONFLICT" ? "Submission already claimed; retry with the same key." : "Asset tag already exists.", code }); return; } throw error; }
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "P2002" || code === "IDEMPOTENCY_CONFLICT") {
+      res.status(409).json({ error: code === "IDEMPOTENCY_CONFLICT" ? "Submission already claimed; retry with the same key." : "Asset tag already exists.", code });
+      return;
+    }
+    console.error("Computer intake submission failed", { code, name: error instanceof Error ? error.name : "UnknownError" });
+    res.status(500).json({ error: "Computer intake could not be submitted.", code: "COMPUTER_INTAKE_SUBMIT_FAILED" });
+  }
 });
 router.get("/assets/:id", async (req: AuthRequest, res) => { const user = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, include: { role: true } }); const asset = await prisma.asset.findUnique({ where: { id: req.params.id }, include: { branch: true, category: true, deviceProfile: true, components: true, assignments: { include: { employee: true } } } }); if (!asset) { res.status(404).json({ error: "Asset not found." }); return; } if (user?.role?.name?.trim().toLowerCase() !== "super_admin" && asset.branchId !== user?.branchId) { res.status(404).json({ error: "Asset not found." }); return; } res.json(asset); });
 export default router;
