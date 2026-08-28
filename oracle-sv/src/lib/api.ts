@@ -2,14 +2,22 @@ import { authStore } from '$lib/stores/auth.svelte';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = authStore.token;
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
   const res = await fetch(path, {
     ...init,
+    signal: init?.signal ?? controller.signal,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
-  });
+  }).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Request timed out while loading ${path}.`);
+    }
+    throw error;
+  }).finally(() => globalThis.clearTimeout(timeout));
   if (!res.ok) {
     if (res.status === 401) {
       authStore.logout();

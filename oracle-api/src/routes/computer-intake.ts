@@ -2,7 +2,6 @@ import { Router, Response, NextFunction } from "express";
 import { createHash } from "node:crypto";
 import { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
-import { effective } from "./operations";
 import { requireAuth, requirePermission, AuthRequest } from "../middleware/auth";
 
 const router = Router();
@@ -45,13 +44,6 @@ function normalize(data: Intake): Intake {
   return cleaned;
 }
 function changedFieldNames(before: unknown, after: Intake) { const oldValue = record(before) ? before : {}; return Object.keys(after).filter((key) => key !== "components" ? JSON.stringify((oldValue as Intake)[key]) !== JSON.stringify(after[key]) : JSON.stringify((oldValue as Intake).components ?? []) !== JSON.stringify(after.components ?? [])); }
-async function gate(req: AuthRequest, res: Response, next: NextFunction) {
-  if (process.env.FEATURE_COMPUTER_MANUAL_INTAKE_V1?.trim().toLowerCase() !== "true") { res.status(404).json({ error: "Computer manual intake is disabled." }); return; }
-  const user = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, select: { role: { select: { name: true } }, branchId: true } });
-  const enabled = await prisma.featureRollout.findUnique({ where: { key: "computer.manual-intake.v1" }, include: { branchOverrides: true } });
-  if (!user || !enabled || !(await effective(enabled, user.branchId ?? undefined, user.role?.name))) { res.status(404).json({ error: "Computer manual intake is disabled." }); return; }
-  next();
-}
 async function role(req: AuthRequest, res: Response, next: NextFunction) {
   const user = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, include: { role: true } });
   const name = user?.role?.name?.trim().toLowerCase();
@@ -80,7 +72,7 @@ async function nextAssetTag(): Promise<string> {
   return `AT-${Date.now().toString(36).toUpperCase()}`;
 }
 
-router.use(gate, requirePermission("create_inventory"), role);
+router.use(requirePermission("create_inventory"), role);
 router.get("/lookups", async (req: AuthRequest, res) => {
   const user = await prisma.systemUser.findUnique({ where: { id: req.user!.id }, include: { role: true } });
   const superAdmin = user?.role?.name?.trim().toLowerCase() === "super_admin";
