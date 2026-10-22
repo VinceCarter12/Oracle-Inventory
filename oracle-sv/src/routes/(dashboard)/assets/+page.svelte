@@ -139,13 +139,20 @@
   ];
 
   // ── Derived ──────────────────────────────────────────────────────────────────
+  const UNCATEGORIZED = 'Uncategorized';
+  // Categories present in the list, biggest first, for the one-click category chips.
+  const categoryCounts = $derived.by(() => {
+    const m = new Map<string, number>();
+    for (const a of assets) { const c = a.category || UNCATEGORIZED; m.set(c, (m.get(c) ?? 0) + 1); }
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  });
   const filtered = $derived.by(() => {
     let result = assets.filter(a => {
       const q = search.toLowerCase();
       const matchQ = !q || a.name.toLowerCase().includes(q)
         || a.serial.toLowerCase().includes(q) || a.assignee.toLowerCase().includes(q);
       const matchS    = filterStatus === 'all' || a.status === filterStatus;
-      const matchC    = !filterCategory || a.category.toLowerCase().includes(filterCategory.toLowerCase());
+      const matchC    = !filterCategory || (a.category || UNCATEGORIZED) === filterCategory;
       const matchCond = !filterCondition || a.condition === filterCondition;
       return matchQ && matchS && matchC && matchCond;
     });
@@ -227,6 +234,7 @@
   }
   function clearSort()         { sortField = null; showSort = false; }
   function clearExtraFilters() { filterCategory = ''; filterCondition = ''; }
+  function setCategory(c: string) { filterCategory = filterCategory === c ? '' : c; currentPage = 1; clearSelection(); }
 
   function clickOutside(node: HTMLElement, cb: () => void) {
     let callback = cb;
@@ -404,13 +412,29 @@
     </div>
   </div>
 
+  <!-- ── Category chips ───────────────────────────────────────────────────── -->
+  {#if categoryCounts.length > 1}
+    <div class="cat-chips" role="group" aria-label="Filter by category">
+      <button class="cat-chip" class:cat-chip--active={!filterCategory} aria-pressed={!filterCategory} onclick={() => setCategory('')}>
+        All <span class="cat-count">{assets.length}</span>
+      </button>
+      {#each categoryCounts as [name, count] (name)}
+        <button class="cat-chip" class:cat-chip--active={filterCategory === name} aria-pressed={filterCategory === name} onclick={() => setCategory(name)}>
+          {name} <span class="cat-count">{count}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   <!-- ── Filter bar ────────────────────────────────────────────────────────── -->
   {#if showFilters}
     <div class="filter-bar" transition:slide={{ duration: 160 }}>
       <span class="filter-bar-label">Filters</span>
       <div class="filter-inputs">
-        <input class="filter-input" type="text" placeholder="Category…"
-          bind:value={filterCategory} aria-label="Filter by category" />
+        <select class="tool-select" value={filterCategory} onchange={(e) => setCategory((e.target as HTMLSelectElement).value)} aria-label="Filter by category">
+          <option value="">All Categories</option>
+          {#each categoryCounts as [name] (name)}<option value={name}>{name}</option>{/each}
+        </select>
         <select class="tool-select" bind:value={filterCondition} aria-label="Filter by condition">
           <option value="">All Conditions</option>
           <option value="usable">Usable</option>
@@ -670,6 +694,15 @@
   .sort-icon { transition: transform 220ms ease; flex-shrink: 0; }
   .sort-icon--desc { transform: rotate(180deg); }
   .sort-dir-badge { margin-left: auto; font-size: 11px; color: var(--mute); }
+
+  /* ── Category chips ──────────────────────────────────────────────────────── */
+  .cat-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+  .cat-chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--canvas); color: var(--body); font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: border-color 120ms ease, background 120ms ease, color 120ms ease; }
+  .cat-chip:hover { border-color: var(--ink); color: var(--ink); }
+  .cat-chip--active { background: var(--ink); border-color: var(--ink); color: var(--on-primary); }
+  .cat-chip--active:hover { color: var(--on-primary); }
+  .cat-count { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--canvas-soft-2); color: var(--mute); font-variant-numeric: tabular-nums; }
+  .cat-chip--active .cat-count { background: rgb(255 255 255 / 0.18); color: var(--on-primary); }
 
   /* ── Filter bar ──────────────────────────────────────────────────────────── */
   .filter-dot { width: 6px; height: 6px; border-radius: 999px; background: oklch(52% 0.18 264); flex-shrink: 0; }
